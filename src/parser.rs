@@ -494,6 +494,7 @@ fn find_rust_traits(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                         let return_query = "(function_item return_type: (_) @return)";
                         query_nodes(method_node, source, return_query)?
                     } else {
+                        // Try a more generic approach for other node types
                         Vec::new()
                     };
                     
@@ -637,8 +638,8 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                     if !params_nodes.is_empty() {
                         signature.push_str(node_text(&params_nodes[0], source));
                         
-                        // Add return type if present
-                        let return_query = "(function_item return_type: (type_identifier) @return)";
+                        // Add return type if present - try both specific and generic approach
+                        let return_query = "(function_item return_type: (_) @return)";
                         let return_nodes = query_nodes(method_node, source, return_query)?;
                         
                         if !return_nodes.is_empty() {

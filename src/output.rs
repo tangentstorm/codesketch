@@ -114,7 +114,7 @@ fn collect_definition_lines(def: &Definition, all_defs: &[Definition], depth: us
     
     // Format signature for various types
     let sig_str = match def.def_type {
-        DefType::Function => {
+        DefType::Function | DefType::Method => {
             if let Some(sig) = &def.info.signature {
                 format!(" {}", sig).dimmed()
             } else {
