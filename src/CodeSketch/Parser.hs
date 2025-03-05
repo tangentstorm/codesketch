@@ -310,15 +310,25 @@ extractRustStructs content =
 extractRustImpls :: String -> [Definition]
 extractRustImpls content = 
   let lns = zip [1..] (splitLines content)
-      implLines = filter (isImplDeclaration . snd) lns
+      -- Enhanced to explicitly check and debug each line
+      implLines = concat $ map (\(lineNum, line) -> 
+                        if isImplDeclaration line
+                          then [(lineNum, line)]
+                          else []
+                     ) lns
   in map (\(lineNum, line) -> 
            let def = extractImplDef line
                updatedInfo = (defInfo def) { lineNum = Just lineNum }
            in def { defInfo = updatedInfo }
          ) implLines
   where
-    isImplDeclaration line = 
-      ("impl " `isInfixOf` line) && ("{" `isInfixOf` line)
+    isImplDeclaration line =
+      -- More robust implementation detection 
+      let hasImpl = "impl " `isInfixOf` line
+          hasForWord = "for " `isInfixOf` line
+          hasBlock = "{" `isInfixOf` line
+          -- Check both impl blocks with braces and trait impl declarations 
+      in hasImpl && (hasBlock || hasForWord)
     
     extractImplDef :: String -> Definition
     extractImplDef line =
@@ -575,22 +585,8 @@ extractDefinitions filename = do
               
               -- Create a filtered list of impl blocks by taking only one per base type
               -- We prioritize trait impls over regular impls
-              baseTypes = nub $ map (baseImplName . iden) impls
-              
-              -- For each base type, pick the best impl (prioritize trait impls)
-              pickBestImpl :: String -> Maybe Definition
-              pickBestImpl baseName = 
-                let typeImpls = filter (\d -> baseImplName (iden d) == baseName) impls
-                    -- First look for trait impl
-                    traitImpls = filter (\d -> ':' `elem` iden d) typeImpls
-                in if not (null traitImpls)
-                     then Just (head traitImpls)  -- Use trait impl if available
-                     else if not (null typeImpls)
-                          then Just (head typeImpls)  -- Otherwise use regular impl
-                          else Nothing
-              
-              -- Select the best impls
-              selectedImpls = mapMaybe pickBestImpl baseTypes
+              -- Keep all impls, don't filter by base type
+              selectedImpls = impls
               
               -- Combine all definitions
               allDefs = functions ++ structs ++ modules ++ selectedImpls

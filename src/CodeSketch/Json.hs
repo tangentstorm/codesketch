@@ -188,13 +188,16 @@ definitionsToTextTree definitions parentPath =
           -- Get child definitions
           childrenNames = children (defInfo def)
           -- Also include definitions that have this def as parent
+          -- Regular parent-child relationship handling
           childrenByParent = filter (\d -> case parent (defInfo d) of
                                           Just p -> p == iden def
                                           Nothing -> False
                                     ) definitions
+                      
           -- Combine both sources of children
           allChildrenNames = childrenNames ++ map iden childrenByParent
           childDefs = filter (\d -> iden d `elem` allChildrenNames) definitions
+          
           -- Sort children by line number
           sortedChildDefs = sortByLineNumber childDefs
           
@@ -212,10 +215,15 @@ definitionsToTextTree definitions parentPath =
 -- | Sort definitions by line number
 sortByLineNumber :: [Definition] -> [Definition]
 sortByLineNumber defs = 
-  -- Remove duplicate methods first
-  let uniqueDefs = nubBy (\d1 d2 -> iden d1 == iden d2 && 
-                                    defType d1 == defType d2 && 
-                                    signature (defInfo d1) == signature (defInfo d2)) defs
+  -- Remove duplicate methods but be careful with impl blocks
+  let uniqueDefs = nubBy (\d1 d2 -> 
+                           -- Only consider duplicates if they have same name, type, signature, AND
+                           -- neither is an Impl (impl blocks need special handling)
+                           iden d1 == iden d2 && 
+                           defType d1 == defType d2 && 
+                           defType d1 /= Impl &&  -- Don't remove impl blocks
+                           signature (defInfo d1) == signature (defInfo d2))
+                        defs
   -- Then sort by line number
   in sortBy (\d1 d2 -> 
                let l1 = lineNum (defInfo d1)
