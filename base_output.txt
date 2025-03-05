@@ -1,0 +1,13 @@
+samples/base.rs
+  12 pub trait Base
+  70 pub trait GraphViz
+  92 impl GraphViz for T
+  93   fn write_dot (&self, n:NID, wr: &mut dyn std::fmt::Write)
+ 110 pub macro inherit
+ 127 pub struct Simplify
+ 129 impl Base for Simplify<T>
+ 131   fn and (&mut self, x:NID, y:NID) -> NID
+ 142 pub macro expr
+ 154 pub macro vid_map
+ 172 pub macro base_test
+

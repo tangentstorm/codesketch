@@ -1,0 +1,180 @@
+../test/nid.rs
+  12 pub struct NID
+  92   fn not (self) -> NID
+  97   fn fmt (&self, f: &mut fmt::Formatter)
+ 114   fn fmt (&self, f: &mut fmt::Formatter)
+ 197   pub fn o () -> Self
+ 198   pub fn i () -> Self
+ 199   pub fn from_bit (b:bool) -> Self
+ 200   pub fn to_bit (&self)
+ 202   pub fn var (v:u32) -> Self
+ 203   pub fn vir (v:u32) -> Self
+ 204   pub fn from_var (v:vid::VID) -> Self
+ 205   pub fn from_vir (v:vid::VID) -> Self
+ 207   pub fn from_vid (v:vid::VID) -> Self
+ 208   pub fn from_vid_idx (v:vid::VID, i:usize) -> Self
+ 209   pub fn vid (&self)
+ 211   pub fn ixn (ix:usize) -> Self
+ 214   pub fn is_const (&self)
+ 217   pub fn is_vid (&self)
+ 220   pub fn is_var (&self)
+ 223   pub fn is_vir (&self)
+ 226   pub fn is_lit (&self)
+ 229   pub fn is_inv (&self)
+ 232   pub fn inv_if (&self, cond:bool) -> NID
+ 236   pub fn is_ixn (self)
+ 239   pub fn idx (self)
+ 243   pub fn raw (self) -> NID
+ 246   pub fn fun (arity:u8, tbl:u32) -> NidFun
+ 250   pub fn is_fun (&self)
+ 251   pub fn to_fun (&self)
+ 254   pub fn tbl (&self)
+ 258   pub fn might_depend_on (&self, v:vid::VID)
+ 264   pub fn _from_u64 (x:u64) -> Self
+ 265   pub fn _to_u64 (&self)
+  16 pub struct NidFun
+  63 fn vid_bits (x:NID) -> VidBits
+  68 fn nv (v:VidBits) -> NID
+  71 fn nvi (v:VidBits,i:usize) -> NID
+  76 fn vid_to_bits (v:vid::VID) -> VidBits
+  83 fn bits_to_vid (o:VidBits)
+  90 impl NID
+  92   fn not (self) -> NID
+  97   fn fmt (&self, f: &mut fmt::Formatter)
+ 114   fn fmt (&self, f: &mut fmt::Formatter)
+ 197   pub fn o () -> Self
+ 198   pub fn i () -> Self
+ 199   pub fn from_bit (b:bool) -> Self
+ 200   pub fn to_bit (&self)
+ 202   pub fn var (v:u32) -> Self
+ 203   pub fn vir (v:u32) -> Self
+ 204   pub fn from_var (v:vid::VID) -> Self
+ 205   pub fn from_vir (v:vid::VID) -> Self
+ 207   pub fn from_vid (v:vid::VID) -> Self
+ 208   pub fn from_vid_idx (v:vid::VID, i:usize) -> Self
+ 209   pub fn vid (&self)
+ 211   pub fn ixn (ix:usize) -> Self
+ 214   pub fn is_const (&self)
+ 217   pub fn is_vid (&self)
+ 220   pub fn is_var (&self)
+ 223   pub fn is_vir (&self)
+ 226   pub fn is_lit (&self)
+ 229   pub fn is_inv (&self)
+ 232   pub fn inv_if (&self, cond:bool) -> NID
+ 236   pub fn is_ixn (self)
+ 239   pub fn idx (self)
+ 243   pub fn raw (self) -> NID
+ 246   pub fn fun (arity:u8, tbl:u32) -> NidFun
+ 250   pub fn is_fun (&self)
+ 251   pub fn to_fun (&self)
+ 254   pub fn tbl (&self)
+ 258   pub fn might_depend_on (&self, v:vid::VID)
+ 264   pub fn _from_u64 (x:u64) -> Self
+ 265   pub fn _to_u64 (&self)
+  96 impl NID
+  92   fn not (self) -> NID
+  97   fn fmt (&self, f: &mut fmt::Formatter)
+ 114   fn fmt (&self, f: &mut fmt::Formatter)
+ 197   pub fn o () -> Self
+ 198   pub fn i () -> Self
+ 199   pub fn from_bit (b:bool) -> Self
+ 200   pub fn to_bit (&self)
+ 202   pub fn var (v:u32) -> Self
+ 203   pub fn vir (v:u32) -> Self
+ 204   pub fn from_var (v:vid::VID) -> Self
+ 205   pub fn from_vir (v:vid::VID) -> Self
+ 207   pub fn from_vid (v:vid::VID) -> Self
+ 208   pub fn from_vid_idx (v:vid::VID, i:usize) -> Self
+ 209   pub fn vid (&self)
+ 211   pub fn ixn (ix:usize) -> Self
+ 214   pub fn is_const (&self)
+ 217   pub fn is_vid (&self)
+ 220   pub fn is_var (&self)
+ 223   pub fn is_vir (&self)
+ 226   pub fn is_lit (&self)
+ 229   pub fn is_inv (&self)
+ 232   pub fn inv_if (&self, cond:bool) -> NID
+ 236   pub fn is_ixn (self)
+ 239   pub fn idx (self)
+ 243   pub fn raw (self) -> NID
+ 246   pub fn fun (arity:u8, tbl:u32) -> NidFun
+ 250   pub fn is_fun (&self)
+ 251   pub fn to_fun (&self)
+ 254   pub fn tbl (&self)
+ 258   pub fn might_depend_on (&self, v:vid::VID)
+ 264   pub fn _from_u64 (x:u64) -> Self
+ 265   pub fn _to_u64 (&self)
+ 113 impl NID
+  92   fn not (self) -> NID
+  97   fn fmt (&self, f: &mut fmt::Formatter)
+ 114   fn fmt (&self, f: &mut fmt::Formatter)
+ 197   pub fn o () -> Self
+ 198   pub fn i () -> Self
+ 199   pub fn from_bit (b:bool) -> Self
+ 200   pub fn to_bit (&self)
+ 202   pub fn var (v:u32) -> Self
+ 203   pub fn vir (v:u32) -> Self
+ 204   pub fn from_var (v:vid::VID) -> Self
+ 205   pub fn from_vir (v:vid::VID) -> Self
+ 207   pub fn from_vid (v:vid::VID) -> Self
+ 208   pub fn from_vid_idx (v:vid::VID, i:usize) -> Self
+ 209   pub fn vid (&self)
+ 211   pub fn ixn (ix:usize) -> Self
+ 214   pub fn is_const (&self)
+ 217   pub fn is_vid (&self)
+ 220   pub fn is_var (&self)
+ 223   pub fn is_vir (&self)
+ 226   pub fn is_lit (&self)
+ 229   pub fn is_inv (&self)
+ 232   pub fn inv_if (&self, cond:bool) -> NID
+ 236   pub fn is_ixn (self)
+ 239   pub fn idx (self)
+ 243   pub fn raw (self) -> NID
+ 246   pub fn fun (arity:u8, tbl:u32) -> NidFun
+ 250   pub fn is_fun (&self)
+ 251   pub fn to_fun (&self)
+ 254   pub fn tbl (&self)
+ 258   pub fn might_depend_on (&self, v:vid::VID)
+ 264   pub fn _from_u64 (x:u64) -> Self
+ 265   pub fn _to_u64 (&self)
+ 117 impl FromStr for NID
+ 120   fn from_str (word: &str)
+ 168 fn test_nids ()
+ 179 fn test_var ()
+ 185 fn test_cmp ()
+ 196 impl NID
+  92   fn not (self) -> NID
+  97   fn fmt (&self, f: &mut fmt::Formatter)
+ 114   fn fmt (&self, f: &mut fmt::Formatter)
+ 197   pub fn o () -> Self
+ 198   pub fn i () -> Self
+ 199   pub fn from_bit (b:bool) -> Self
+ 200   pub fn to_bit (&self)
+ 202   pub fn var (v:u32) -> Self
+ 203   pub fn vir (v:u32) -> Self
+ 204   pub fn from_var (v:vid::VID) -> Self
+ 205   pub fn from_vir (v:vid::VID) -> Self
+ 207   pub fn from_vid (v:vid::VID) -> Self
+ 208   pub fn from_vid_idx (v:vid::VID, i:usize) -> Self
+ 209   pub fn vid (&self)
+ 211   pub fn ixn (ix:usize) -> Self
+ 214   pub fn is_const (&self)
+ 217   pub fn is_vid (&self)
+ 220   pub fn is_var (&self)
+ 223   pub fn is_vir (&self)
+ 226   pub fn is_lit (&self)
+ 229   pub fn is_inv (&self)
+ 232   pub fn inv_if (&self, cond:bool) -> NID
+ 236   pub fn is_ixn (self)
+ 239   pub fn idx (self)
+ 243   pub fn raw (self) -> NID
+ 246   pub fn fun (arity:u8, tbl:u32) -> NidFun
+ 250   pub fn is_fun (&self)
+ 251   pub fn to_fun (&self)
+ 254   pub fn tbl (&self)
+ 258   pub fn might_depend_on (&self, v:vid::VID)
+ 264   pub fn _from_u64 (x:u64) -> Self
+ 265   pub fn _to_u64 (&self)
+ 268 fn test_tbl_fmt ()
+ 276 pub module named
+

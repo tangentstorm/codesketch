@@ -1,0 +1,8 @@
+test.rs
+   1 fn hello ()
+   3 impl Test
+   4   fn world ()
+   9 impl Test
+  10   fn another ()
+  14   fn third ()
+
