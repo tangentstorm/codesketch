@@ -5,6 +5,7 @@ module CodeSketch.Parser
 
 import CodeSketch.Types
 import CodeSketch.Errors as Errors
+import qualified CodeSketch.TreeSitter.Rust as TSRust
 
 import System.FilePath (takeExtension)
 import Control.Exception (try, SomeException)
@@ -571,37 +572,55 @@ buildDefinitionTree defs =
 -- | Parse a file and extract definitions based on language
 extractDefinitions :: FilePath -> IO [Definition]
 extractDefinitions filename = do
-  maybeContent <- parseFile filename
-  case maybeContent of
-    Nothing -> return []
-    Just content ->
-      if takeExtension filename == ".rs"
-        then do
-          -- Extract all definitions by type
-          let functions = extractRustFunctions content
-              structs = extractRustStructs content
-              modules = extractRustModules content
-              impls = extractRustImpls content
-              
-              -- Create a filtered list of impl blocks by taking only one per base type
-              -- We prioritize trait impls over regular impls
-              -- Keep all impls, don't filter by base type
-              selectedImpls = impls
-              
-              -- Combine all definitions
-              allDefs = functions ++ structs ++ modules ++ selectedImpls
-              
-              -- Build the tree structure
-              treeDefs = buildDefinitionTree allDefs
-              
-          -- Return the processed definitions
-          return treeDefs
-        else return []
+  -- Try tree-sitter parsing first if available
+  maybeTreeSitterDefs <- tryTreeSitterParse filename
+  case maybeTreeSitterDefs of
+    Just defs -> do
+      -- Tree-sitter parsing succeeded
+      Errors.info $ "Parsed " ++ filename ++ " using tree-sitter"
+      return defs
+    Nothing -> do
+      -- Fall back to string-based parsing
+      Errors.info $ "Falling back to string-based parsing for " ++ filename
+      maybeContent <- parseFile filename
+      case maybeContent of
+        Nothing -> return []
+        Just content ->
+          if takeExtension filename == ".rs"
+            then do
+              -- Extract all definitions by type
+              let functions = extractRustFunctions content
+                  structs = extractRustStructs content
+                  modules = extractRustModules content
+                  impls = extractRustImpls content
+                  
+                  -- Create a filtered list of impl blocks by taking only one per base type
+                  -- We prioritize trait impls over regular impls
+                  -- Keep all impls, don't filter by base type
+                  selectedImpls = impls
+                  
+                  -- Combine all definitions
+                  allDefs = functions ++ structs ++ modules ++ selectedImpls
+                  
+                  -- Build the tree structure
+                  treeDefs = buildDefinitionTree allDefs
+                  
+              -- Return the processed definitions
+              return treeDefs
+            else return []
   where
     -- Get the base implementation name (part before any colon)
     baseImplName :: String -> String
     baseImplName name = case break (==':') name of
                          (base, _) -> base
+                         
+-- | Try to parse using tree-sitter
+-- This will try to use the appropriate tree-sitter parser based on file extension
+tryTreeSitterParse :: FilePath -> IO (Maybe [Definition])
+tryTreeSitterParse filename = 
+  case takeExtension filename of
+    ".rs" -> TSRust.extractRustDefinitions filename
+    _     -> return Nothing
 
 -- Helper functions
 splitLines :: String -> [String]
