@@ -6,8 +6,8 @@ use ratatui::{
     Frame,
 };
 use syntect::{
-    highlighting::{Theme, ThemeSet},
-    parsing::{SyntaxReference, SyntaxSet},
+    highlighting::ThemeSet,
+    parsing::SyntaxSet,
 };
 use std::sync::Once;
 
@@ -34,26 +34,39 @@ pub fn draw_ui(f: &mut Frame, app: &mut App) {
     
     // Create a layout with two columns: left for tree view, right for source code
     let size = f.size();
+    let main_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Min(3),
+            Constraint::Length(if app.search_mode { 3 } else { 0 }),
+        ])
+        .split(size);
+    
     let chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
             Constraint::Percentage(35),
             Constraint::Percentage(65),
         ])
-        .split(size);
+        .split(main_chunks[0]);
     
     // Draw the code outline tree on the left
     draw_tree(f, app, chunks[0]);
     
     // Draw the source code on the right
     draw_source_code(f, app, chunks[1]);
+    
+    // Draw search box if in search mode
+    if app.search_mode {
+        draw_search_box(f, app, main_chunks[1]);
+    }
 }
 
 /// Draw the code outline tree widget
 fn draw_tree(f: &mut Frame, app: &mut App, area: Rect) {
     // Create a block for the outline
     let block = Block::default()
-        .title("Code Outline (↑↓: navigate, Tab: expand/collapse)")
+        .title("Code Outline (↑↓: navigate, Tab: expand/collapse, /: search)")
         .borders(Borders::ALL);
     
     // Calculate available height for items
@@ -139,9 +152,14 @@ fn draw_tree(f: &mut Frame, app: &mut App, area: Rect) {
             
             spans.push(Span::styled(display_name, name_style));
             
-            // Highlight if this is the current position
-            let style = if i == app.cursor_position {
+            // Highlight if this is the current position or a search result
+            let is_search_result = app.search_results.contains(&i);
+            let is_current = i == app.cursor_position;
+            
+            let style = if is_current {
                 Style::default().bg(Color::DarkGray)
+            } else if is_search_result {
+                Style::default().bg(Color::Rgb(50, 50, 80))
             } else {
                 Style::default()
             };
@@ -174,28 +192,35 @@ fn draw_source_code(f: &mut Frame, app: &App, area: Rect) {
     // Get source code for the current node
     let source = app.get_current_source();
     
-    // Create text with line numbers
-    let mut line_spans = Vec::new();
+    // Get start and end line
     let start_line = if app.cursor_position < app.nodes.len() {
         app.nodes[app.cursor_position].line as usize
     } else {
         1
     };
     
-    for (i, line) in source.iter().enumerate() {
+    // Join the source code for syntax highlighting
+    let source_text = source.join("\n");
+    
+    // Highlight the whole text at once for better context
+    let highlighted_lines = syntax_highlight(&source_text);
+    
+    // Create text with line numbers
+    let mut line_spans = Vec::new();
+    
+    for (i, line) in highlighted_lines.into_iter().enumerate() {
         let line_num = start_line + i;
         let line_prefix = format!("{:4} | ", line_num);
         
-        // Apply simple syntax highlighting (full syntect implementation would be better)
-        let highlighted_spans = simple_highlight_rust(line);
-        
-        // Add line number prefix
+        // Create line with line number prefix
         let mut spans = vec![
             Span::styled(line_prefix, Style::default().fg(Color::DarkGray)),
         ];
         
-        // Add highlighted content
-        spans.extend(highlighted_spans);
+        // Add highlighted content spans
+        for span in line.spans {
+            spans.push(span);
+        }
         
         line_spans.push(Line::from(spans));
     }
@@ -297,11 +322,81 @@ fn simple_highlight_rust(line: &str) -> Vec<Span> {
     spans
 }
 
-/// Apply syntax highlighting to text (not implemented yet)
-fn _syntax_highlight<'a>(text: &'a str, syntax: &SyntaxReference, theme: &Theme) -> Vec<Line<'a>> {
-    // This would be implemented with syntect
-    // For now, just return plain text
+/// Apply proper syntax highlighting using syntect
+fn syntax_highlight(text: &str) -> Vec<Line> {
+    unsafe {
+        if let (Some(syntax_set), Some(theme_set)) = (&SYNTAX_SET, &THEME_SET) {
+            let syntax = syntax_set.find_syntax_by_extension("rs")
+                .unwrap_or_else(|| syntax_set.find_syntax_plain_text());
+            
+            let theme = theme_set.themes.get("base16-ocean.dark")
+                .or_else(|| theme_set.themes.get("Solarized (dark)"))
+                .or_else(|| theme_set.themes.values().next())
+                .unwrap();
+            
+            // Create highlighter (variable h not used, removed to avoid warning)
+            let mut highlighter = syntect::easy::HighlightLines::new(syntax, theme);
+            
+            return text.lines()
+                .map(|line| {
+                    let ranges = highlighter.highlight_line(line, syntax_set).unwrap_or_default();
+                    let mut spans = Vec::new();
+                    
+                    for (style, text) in ranges {
+                        // Convert syntect color to ratatui color
+                        let fg_color = match style.foreground {
+                            syntect::highlighting::Color { r, g, b, a: _ } => {
+                                Color::Rgb(r, g, b)
+                            }
+                        };
+                        
+                        let ratatui_style = Style::default().fg(fg_color);
+                        if style.font_style.contains(syntect::highlighting::FontStyle::BOLD) {
+                            spans.push(Span::styled(text.to_string(), ratatui_style.add_modifier(Modifier::BOLD)));
+                        } else if style.font_style.contains(syntect::highlighting::FontStyle::ITALIC) {
+                            spans.push(Span::styled(text.to_string(), ratatui_style.add_modifier(Modifier::ITALIC)));
+                        } else {
+                            spans.push(Span::styled(text.to_string(), ratatui_style));
+                        }
+                    }
+                    
+                    Line::from(spans)
+                })
+                .collect();
+        }
+    }
+    
+    // Fallback to simple highlighting if syntect initialization failed
     text.lines()
-        .map(|line| Line::from(Span::raw(line.to_string())))
+        .map(|line| Line::from(simple_highlight_rust(line)))
         .collect()
+}
+
+/// Draw search box at the bottom of the screen
+fn draw_search_box(f: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .title("Search")
+        .borders(Borders::ALL);
+    
+    let search_status = if app.search_results.is_empty() {
+        if app.search_query.is_empty() {
+            "Type to search...".to_string()
+        } else {
+            "No results".to_string()
+        }
+    } else {
+        format!("{}/{} matches", app.search_index + 1, app.search_results.len())
+    };
+    
+    let mut spans = vec![
+        Span::styled(app.search_query.clone(), Style::default().fg(Color::Yellow)),
+        Span::raw(" "),
+    ];
+    
+    spans.push(Span::styled(search_status, Style::default().fg(Color::DarkGray)));
+    
+    let input = Paragraph::new(Line::from(spans))
+        .block(block);
+    
+    f.render_widget(input, area);
 }

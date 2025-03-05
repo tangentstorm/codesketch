@@ -30,6 +30,12 @@ pub struct App {
     pub current_file: Option<String>,
     pub file_contents: HashMap<String, Vec<String>>,
     pub highlighted_contents: HashMap<String, Vec<String>>,
+    
+    // Search
+    pub search_mode: bool,
+    pub search_query: String,
+    pub search_results: Vec<usize>,
+    pub search_index: usize,
 }
 
 impl App {
@@ -44,6 +50,10 @@ impl App {
             current_file: None,
             file_contents: HashMap::new(),
             highlighted_contents: HashMap::new(),
+            search_mode: false,
+            search_query: String::new(),
+            search_results: Vec::new(),
+            search_index: 0,
         };
         
         // Build the tree
@@ -229,6 +239,80 @@ impl App {
         // Not implemented
     }
     
+    /// Enter search mode
+    pub fn enter_search(&mut self) {
+        self.search_mode = true;
+        self.search_query.clear();
+        self.search_results.clear();
+        self.search_index = 0;
+    }
+    
+    /// Exit search mode
+    pub fn exit_search(&mut self) {
+        self.search_mode = false;
+    }
+    
+    /// Add character to search query
+    pub fn add_search_char(&mut self, c: char) {
+        self.search_query.push(c);
+        self.update_search();
+    }
+    
+    /// Remove character from search query
+    pub fn remove_search_char(&mut self) {
+        self.search_query.pop();
+        self.update_search();
+    }
+    
+    /// Update search results based on current query
+    fn update_search(&mut self) {
+        self.search_results.clear();
+        self.search_index = 0;
+        
+        if self.search_query.is_empty() {
+            return;
+        }
+        
+        let query = self.search_query.to_lowercase();
+        
+        // Search in node names and types
+        for (i, node) in self.nodes.iter().enumerate() {
+            if node.name.to_lowercase().contains(&query) || 
+               node.def_type.to_lowercase().contains(&query) {
+                self.search_results.push(i);
+            }
+        }
+    }
+    
+    /// Navigate to the next search result
+    pub fn next_search_result(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        
+        self.search_index = (self.search_index + 1) % self.search_results.len();
+        let node_index = self.search_results[self.search_index];
+        self.cursor_position = node_index;
+        self.adjust_scroll();
+    }
+    
+    /// Navigate to the previous search result
+    pub fn prev_search_result(&mut self) {
+        if self.search_results.is_empty() {
+            return;
+        }
+        
+        self.search_index = if self.search_index == 0 {
+            self.search_results.len() - 1
+        } else {
+            self.search_index - 1
+        };
+        
+        let node_index = self.search_results[self.search_index];
+        self.cursor_position = node_index;
+        self.adjust_scroll();
+    }
+    
     /// Adjust scroll to keep cursor in view
     fn adjust_scroll(&mut self) {
         if self.cursor_position < self.scroll_offset {
@@ -246,8 +330,8 @@ impl App {
     
     /// Preprocess syntax highlighting for a file
     fn preprocess_syntax_highlighting(&mut self, path: &str) {
-        // We'll implement this with syntect later
-        // For now, just copy the content
+        // Just store the content for now, highlighting will be done on demand
+        // This is more efficient as we only highlight what we need to show
         if let Some(content) = self.file_contents.get(path) {
             self.highlighted_contents.insert(path.to_string(), content.clone());
         }
