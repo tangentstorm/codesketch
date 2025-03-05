@@ -85,7 +85,7 @@ fn collect_definition_lines(def: &Definition, all_defs: &[Definition], depth: us
     
     // Format type and name
     let (type_str, name_str) = match def.def_type {
-        DefType::Module => ("module ".cyan(), def.iden.cyan().bold()),
+        DefType::Module => ("mod ".cyan(), def.iden.cyan().bold()),
         DefType::Struct => ("struct ".green(), def.iden.green().bold()),
         DefType::Enum => ("enum ".green(), def.iden.green().bold()),
         DefType::Function => ("fn ".yellow(), def.iden.normal().bold()),

@@ -83,13 +83,15 @@ fn parse_rust_file(path: &Path) -> Result<Option<PathInfo>> {
     
     let root_node = tree.root_node();
     
-    // Extract all definitions
+    // First, find modules to build the module tree
+    let modules = find_rust_modules(&root_node, &source)?;
+    
+    // Extract all other definitions
     let mut functions = find_rust_functions(&root_node, &source)?;
     let structs = find_rust_structs(&root_node, &source)?;
     let enums = find_rust_enums(&root_node, &source)?;
     let traits = find_rust_traits(&root_node, &source)?;
     let impls = find_rust_impls(&root_node, &source)?;
-    let modules = find_rust_modules(&root_node, &source)?;
     let type_aliases = find_rust_type_aliases(&root_node, &source)?;
     let macros = find_rust_macros(&root_node, &source)?;
     let constants = find_rust_constants(&root_node, &source)?;
@@ -529,8 +531,51 @@ fn find_rust_modules(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             Visibility::Private
         };
         
+        // Find module contents (if inline)
+        let mut children = Vec::new();
+        
+        // First try to get module content nodes
+        let body_query = "(mod_item body: (_)) @body";
+        let body_nodes = query_nodes(&node, source, body_query)?;
+        
+        // Process declarations within the module body
+        if !body_nodes.is_empty() {
+            let body_node = &body_nodes[0];
+            
+            // Find all function declarations within the module
+            let func_query = "(declaration_list (function_item name: (identifier) @name))";
+            let func_nodes = query_nodes(body_node, source, func_query)?;
+            for func_node in func_nodes {
+                let func_name = node_text(&func_node, source);
+                children.push(func_name.to_string());
+            }
+            
+            // Find all struct declarations within the module
+            let struct_query = "(declaration_list (struct_item name: (type_identifier) @name))";
+            let struct_nodes = query_nodes(body_node, source, struct_query)?;
+            for struct_node in struct_nodes {
+                let struct_name = node_text(&struct_node, source);
+                children.push(struct_name.to_string());
+            }
+            
+            // Find all enum declarations within the module
+            let enum_query = "(declaration_list (enum_item name: (type_identifier) @name))";
+            let enum_nodes = query_nodes(body_node, source, enum_query)?;
+            for enum_node in enum_nodes {
+                let enum_name = node_text(&enum_node, source);
+                children.push(enum_name.to_string());
+            }
+        }
+        
+        // Get module start and end line numbers
+        let mod_start_line = node_line(&node);
+        let mod_end_line = if !body_nodes.is_empty() {
+            node.end_position().row as u32 + 1
+        } else {
+            mod_start_line
+        };
+        
         // Create module definition
-        let line_num = node_line(&node);
         let def = Definition {
             iden: name,
             def_type: DefType::Module,
@@ -538,9 +583,9 @@ fn find_rust_modules(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             info: DefInfo {
                 signature: None,
                 parent: None,
-                children: Vec::new(),
-                line_num: Some(line_num),
-                line_end: None,
+                children,
+                line_num: Some(mod_start_line),
+                line_end: Some(mod_end_line),
             },
         };
         
@@ -706,7 +751,43 @@ fn find_rust_constants(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
 
 // Build parent-child relationships between definitions
 fn build_definition_tree(defs: Vec<Definition>) -> Vec<Definition> {
-    // We're already setting the parent-child relationships when creating the definitions,
-    // so we don't need to do additional processing here
-    defs
+    let mut result = defs.clone();
+    
+    // Find module ranges and assign definitions to their parent modules
+    let modules: Vec<_> = defs.iter()
+        .filter(|def| def.def_type == DefType::Module)
+        .collect();
+    
+    // For each module, directly add children as referenced in module.info.children
+    for module in &modules {
+        for child_name in &module.info.children {
+            // Find the definition with matching name and set its parent
+            for def in result.iter_mut() {
+                if &def.iden == child_name && def.info.parent.is_none() {
+                    def.info.parent = Some(module.iden.clone());
+                    break;
+                }
+            }
+        }
+    }
+    
+    // For remaining definitions, try to find their parent module by line range
+    for def in result.iter_mut() {
+        if def.def_type != DefType::Module && def.info.parent.is_none() {
+            // Check if this definition falls within a module's line range
+            if let Some(line_num) = def.info.line_num {
+                for module in &modules {
+                    if let (Some(start), Some(end)) = (module.info.line_num, module.info.line_end) {
+                        if line_num > start && line_num < end {
+                            // This definition is within this module's range
+                            def.info.parent = Some(module.iden.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    result
 }
