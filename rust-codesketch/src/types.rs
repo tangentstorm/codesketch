@@ -14,19 +14,8 @@ pub enum DefType {
     Other(String),
 }
 
-impl DefType {
-    pub fn as_str(&self) -> &str {
-        match self {
-            DefType::Module => "module",
-            DefType::Struct => "struct",
-            DefType::Enum => "enum",
-            DefType::Function => "fn",
-            DefType::Trait => "trait",
-            DefType::Impl => "impl",
-            DefType::Other(s) => s,
-        }
-    }
-}
+// Implementation for DefType is left for potential future use
+// Currently unused but may be needed for extensibility
 
 /// Visibility enumeration
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -39,26 +28,11 @@ pub enum Visibility {
     Private,
 }
 
-impl Visibility {
-    pub fn as_str(&self) -> &str {
-        match self {
-            Visibility::Public => "pub",
-            Visibility::Protected => "protected",
-            Visibility::Private => "",
-        }
-    }
-    
-    pub fn as_symbol(&self) -> &str {
-        match self {
-            Visibility::Public => "*",
-            Visibility::Protected => "+",
-            Visibility::Private => "-",
-        }
-    }
-}
+// Implementation for Visibility is left for potential future use
+// Currently unused but may be needed for extensibility
 
 /// Definition information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DefInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
@@ -70,18 +44,6 @@ pub struct DefInfo {
     pub line_num: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line_end: Option<u32>,
-}
-
-impl Default for DefInfo {
-    fn default() -> Self {
-        DefInfo {
-            signature: None,
-            parent: None,
-            children: Vec::new(),
-            line_num: None,
-            line_end: None,
-        }
-    }
 }
 
 /// Definition structure

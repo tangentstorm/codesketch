@@ -1,12 +1,11 @@
 use anyhow::Result;
 use colored::*;
-use serde_json;
 
 use crate::types::{Root, Definition, DefType, Visibility};
 
 // Output definitions as JSON
 pub fn output_json(root: &Root) -> Result<()> {
-    let json = serde_json::to_string_pretty(root)?;
+    let json = ::serde_json::to_string_pretty(root)?;
     println!("{}", json);
     Ok(())
 }

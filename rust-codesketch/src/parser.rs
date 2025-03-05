@@ -397,10 +397,7 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
         };
         
         // Create appropriate signature for the impl block
-        let signature = match &trait_name {
-            Some(trait_name) => Some(format!("{} for {}", trait_name, type_name)),
-            None => None,
-        };
+        let signature = trait_name.as_ref().map(|trait_name| format!("{} for {}", trait_name, type_name));
         
         // Get impl block start and end line numbers
         let impl_start_line = node_line(&node);
