@@ -35,16 +35,17 @@ Output is a human-readable text outline of all types and definitions in your cod
 
 ```
 /path/to/file.rs:
-  [S] + MyStruct
-  [F] - my_private_function
-  [F] + my_public_function
-  [T] + MyTrait
-  [M] + my_module
+  public struct MyStruct
+  private fn my_private_function()
+  public fn my_public_function(param: i32) -> bool
+  public trait MyTrait
+  public module my_module
 ```
 
-Legend:
-- Type indicators: `[S]` struct, `[E]` enum, `[F]` function, `[T]` trait, `[M]` module, `[I]` impl
-- Visibility: `+` public, `~` protected, `-` private
+The output shows:
+- Full visibility (`public`, `private`, `protected`)
+- Type information (`fn`, `struct`, `enum`, `trait`, `module`, etc.)
+- Function signatures when available
 
 ## Structure
 

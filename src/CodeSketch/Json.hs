@@ -61,22 +61,35 @@ rootToJSON = toJSON
 rootToJSONString :: Root -> String
 rootToJSONString = BL.unpack . encode
 
--- | Convert a definition to a text line with an appropriate symbol
+-- | Convert a definition to a readable text line
 definitionToTextLine :: Definition -> String
 definitionToTextLine def = 
-  let symbol = case defType def of
-        Module   -> "[M]"
-        Struct   -> "[S]"
-        Enum     -> "[E]"
-        Function -> "[F]"
-        Trait    -> "[T]"
-        Impl     -> "[I]"
-        Other _  -> "[?]"
-      visSymbol = case visibility def of
-        Public    -> "+"
-        Protected -> "~"
-        Private   -> "-"
-  in symbol ++ " " ++ visSymbol ++ " " ++ iden def
+  let -- Type description
+      typeDesc = case defType def of
+        Module   -> "module"
+        Struct   -> "struct"
+        Enum     -> "enum"
+        Function -> "fn"
+        Trait    -> "trait"
+        Impl     -> "impl"
+        Other s  -> s
+      
+      -- Visibility description
+      visDesc = case visibility def of
+        Public    -> "public"
+        Protected -> "protected"
+        Private   -> "private"
+      
+      -- Name
+      name = iden def
+      
+      -- Function signature if available
+      sigText = case defType def of
+        Function -> case signature (defInfo def) of
+                     Just sig -> " " ++ sig
+                     Nothing -> ""
+        _ -> ""
+  in visDesc ++ " " ++ typeDesc ++ " " ++ name ++ sigText
 
 -- | Convert a path_info to a text outline with indentation
 pathInfoToTextOutline :: PathInfo -> String

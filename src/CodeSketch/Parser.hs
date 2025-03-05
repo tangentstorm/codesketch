@@ -11,7 +11,8 @@ import Control.Exception (try, SomeException)
 import System.Directory (doesFileExist)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isAlphaNum, isSpace)
-import Data.List (isPrefixOf, isInfixOf, tails)
+import Data.List (isPrefixOf, isInfixOf, tails, findIndex)
+import CodeSketch.Types (DefInfo(..), emptyDefInfo)
 
 -- | Check if a file is a supported language
 isSupportedFile :: FilePath -> Bool
@@ -39,6 +40,51 @@ parseFile filename = do
             return Nothing
           Right content -> return (Just content)
 
+-- | Extract function signature from a line
+extractFunctionSignature :: String -> Maybe String
+extractFunctionSignature line =
+  case break (== '(') line of
+    (_, "") -> Nothing
+    (_, paramsStart) ->
+      case findClosingParen (drop 1 paramsStart) 0 of
+        Nothing -> Nothing
+        Just paramsLen ->
+          let params = take paramsLen (drop 1 paramsStart)
+              rest = drop (paramsLen + 2) paramsStart
+              returnType = case findArrow rest of
+                Nothing -> ""
+                Just idx -> 
+                  let rt = drop (idx + 2) rest
+                  in case break (\c -> c == '{' || c == ';') rt of
+                      (t, _) -> stripSpace t
+          in Just $ "(" ++ params ++ ")" ++ 
+                   (if null returnType then "" else " -> " ++ returnType)
+  where
+    -- Find the matching closing parenthesis
+    findClosingParen :: String -> Int -> Maybe Int
+    findClosingParen [] _ = Nothing
+    findClosingParen (')':_) 0 = Just 0
+    findClosingParen ('(':xs) n = do
+      rest <- findClosingParen xs (n+1)
+      return (rest + 1)
+    findClosingParen (')':xs) n = 
+      if n > 0 
+        then do
+          rest <- findClosingParen xs (n-1)
+          return (rest + 1)
+        else Just 0
+    findClosingParen (_:xs) n = do
+      rest <- findClosingParen xs n
+      return (rest + 1)
+      
+    -- Find arrow in return type
+    findArrow :: String -> Maybe Int
+    findArrow s = findIndex (isPrefixOf "->") (tails s)
+    
+    -- Remove leading and trailing spaces
+    stripSpace :: String -> String
+    stripSpace = dropWhile isSpace . reverse . dropWhile isSpace . reverse
+
 -- | Extract Rust function definitions
 extractRustFunctions :: String -> [Definition]
 extractRustFunctions content = 
@@ -60,7 +106,9 @@ extractRustFunctions content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Function vis
+          -- Try to extract signature
+          signature = extractFunctionSignature line
+      in Definition name Function vis (DefInfo signature)
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -105,7 +153,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Struct vis
+      in Definition name Struct vis emptyDefInfo
     
     extractEnumDef (_, line) =
       let isPub = "pub enum " `isInfixOf` line
@@ -117,7 +165,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Enum vis
+      in Definition name Enum vis emptyDefInfo
     
     extractTraitDef (_, line) =
       let isPub = "pub trait " `isInfixOf` line
@@ -129,7 +177,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Trait vis
+      in Definition name Trait vis emptyDefInfo
       
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -164,7 +212,7 @@ extractRustModules content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Module vis
+      in Definition name Module vis emptyDefInfo
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
