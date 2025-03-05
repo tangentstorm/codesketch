@@ -348,6 +348,7 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
     let impl_nodes = query_nodes(root, source, "(impl_item) @impl")?;
     
     let mut impls = Vec::new();
+    let mut methods = Vec::new();
     for node in impl_nodes {
         // Get type being implemented
         let type_query = "(impl_item type: (type_identifier) @type)";
@@ -400,7 +401,53 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             
             if !method_name_nodes.is_empty() {
                 let method_name = node_text(&method_name_nodes[0], source).to_string();
-                method_names.push(method_name);
+                method_names.push(method_name.clone());
+                
+                // Also create a function definition for each method 
+                // (we'll link it to its parent impl later)
+                let line_num = node_line(method_node);
+                let vis_query = "(function_item (visibility_modifier) @vis)";
+                let vis_nodes = query_nodes(method_node, source, vis_query)?;
+                
+                let visibility = if !vis_nodes.is_empty() {
+                    let vis_text = node_text(&vis_nodes[0], source);
+                    if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
+                } else {
+                    Visibility::Private
+                };
+                
+                // Get function signature
+                let params_query = "(function_item parameters: (parameters) @params)";
+                let params_nodes = query_nodes(method_node, source, params_query)?;
+                
+                let mut signature = String::new();
+                if !params_nodes.is_empty() {
+                    signature.push_str(node_text(&params_nodes[0], source));
+                    
+                    // Add return type if present
+                    let return_query = "(function_item return_type: (type_identifier) @return)";
+                    let return_nodes = query_nodes(method_node, source, return_query)?;
+                    
+                    if !return_nodes.is_empty() {
+                        signature.push_str(" -> ");
+                        signature.push_str(node_text(&return_nodes[0], source));
+                    }
+                }
+                
+                // Create method definition with a parent link to the impl block
+                let method_def = Definition {
+                    iden: method_name.clone(),
+                    def_type: DefType::Function,
+                    vis: visibility,
+                    info: DefInfo {
+                        signature: if signature.is_empty() { None } else { Some(signature) },
+                        parent: Some(unique_id.clone()),  // Link to parent impl
+                        children: Vec::new(),
+                        line_num: Some(line_num),
+                    },
+                };
+                
+                methods.push(method_def);
             }
         }
         
@@ -420,6 +467,9 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
         
         impls.push(def);
     }
+    
+    // Combine impl blocks and their methods
+    impls.extend(methods);
     
     Ok(impls)
 }
@@ -472,47 +522,8 @@ fn find_rust_modules(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
 }
 
 // Build parent-child relationships between definitions
-fn build_definition_tree(mut defs: Vec<Definition>) -> Vec<Definition> {
-    // Process impl blocks to set up parent-child relationships with methods
-    for impl_idx in 0..defs.len() {
-        if defs[impl_idx].def_type == DefType::Impl {
-            let impl_def = defs[impl_idx].clone();
-            let children = impl_def.info.children.clone();
-            
-            // For each child method, find the matching function definition and update its parent
-            for child_name in children {
-                for method_idx in 0..defs.len() {
-                    if defs[method_idx].def_type == DefType::Function && defs[method_idx].iden == child_name {
-                        // Update the method's parent
-                        let mut updated_method = defs[method_idx].clone();
-                        updated_method.info.parent = Some(impl_def.iden.clone());
-                        defs[method_idx] = updated_method;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
-    // Similarly for traits and their methods
-    for trait_idx in 0..defs.len() {
-        if defs[trait_idx].def_type == DefType::Trait {
-            let trait_def = defs[trait_idx].clone();
-            let children = trait_def.info.children.clone();
-            
-            for child_name in children {
-                for method_idx in 0..defs.len() {
-                    if defs[method_idx].def_type == DefType::Function && defs[method_idx].iden == child_name {
-                        // Update the method's parent
-                        let mut updated_method = defs[method_idx].clone();
-                        updated_method.info.parent = Some(trait_def.iden.clone());
-                        defs[method_idx] = updated_method;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-    
+fn build_definition_tree(defs: Vec<Definition>) -> Vec<Definition> {
+    // We're already setting the parent-child relationships when creating the definitions,
+    // so we don't need to do additional processing here
     defs
 }
