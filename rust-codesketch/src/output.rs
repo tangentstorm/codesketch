@@ -101,6 +101,8 @@ fn collect_definition_lines(def: &Definition, all_defs: &[Definition], depth: us
         DefType::Macro => ("macro ".red(), def.iden.red().bold()),
         DefType::Constant => ("const ".yellow(), def.iden.yellow().bold()),
         DefType::TypeAlias => ("type ".cyan(), def.iden.cyan().bold()),
+        DefType::Field => ("field ".green().dimmed(), def.iden.normal()),
+        DefType::Method => ("fn ".yellow().dimmed(), def.iden.normal()),
         DefType::Other(ref s) => (format!("{} ", s).normal(), def.iden.normal().bold()),
     };
     

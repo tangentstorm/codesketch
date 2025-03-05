@@ -234,22 +234,107 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             Visibility::Private
         };
         
+        // Find struct fields
+        let mut field_children = Vec::new();
+        
+        // For normal structs with curly braces
+        let field_query = "(struct_item body: (field_declaration_list (field_declaration name: (field_identifier) @field)))";
+        let field_nodes = query_nodes(&node, source, field_query)?;
+        
+        for field_node in &field_nodes {
+            let field_name = node_text(field_node, source);
+            field_children.push(field_name.to_string());
+        }
+        
+        // Get struct start and end line numbers
+        let struct_start_line = node_line(&node);
+        let struct_end_line = node.end_position().row as u32 + 1;
+        
         // Create struct definition
-        let line_num = node_line(&node);
         let def = Definition {
-            iden: name,
+            iden: name.clone(),
             def_type: DefType::Struct,
             vis: visibility,
             info: DefInfo {
                 signature: None,
                 parent: None,
-                children: Vec::new(),
-                line_num: Some(line_num),
-                line_end: None,
+                children: field_children,
+                line_num: Some(struct_start_line),
+                line_end: Some(struct_end_line),
             },
         };
         
         structs.push(def);
+        
+        // Find all field declarations and create field definitions
+        
+        // Map to track which fields we've already processed
+        let mut processed_fields = std::collections::HashSet::new();
+        
+        // Let's simplify this whole approach
+        // For now, let's just extract field names and not worry about visibility details
+        // We'll create a generic approach that works for both pub and private fields
+        // First, get all field declarations
+        let all_fields_query = "(struct_item body: (field_declaration_list (field_declaration) @decl))";
+        let all_field_decls = query_nodes(&node, source, all_fields_query)?;
+        
+        for field_decl in all_field_decls {
+            // Get field name from declaration
+            let field_name_query = "(field_declaration name: (field_identifier) @name)";
+            let field_name_nodes = query_nodes(&field_decl, source, field_name_query)?;
+            
+            if field_name_nodes.is_empty() {
+                continue;
+            }
+            
+            let field_name = node_text(&field_name_nodes[0], source);
+            
+            // Skip if we've already processed this field
+            if !processed_fields.insert(field_name.to_string()) {
+                continue;
+            }
+            
+            // Determine visibility
+            let vis_query = "(field_declaration (visibility_modifier) @vis)";
+            let vis_nodes = query_nodes(&field_decl, source, vis_query)?;
+            
+            let visibility = if !vis_nodes.is_empty() {
+                let vis_text = node_text(&vis_nodes[0], source);
+                if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
+            } else {
+                Visibility::Private
+            };
+            
+            // Get field type
+            let type_query = "(field_declaration type: (_) @type)";
+            let type_nodes = query_nodes(&field_decl, source, type_query)?;
+            
+            let signature = if !type_nodes.is_empty() {
+                let type_text = node_text(&type_nodes[0], source);
+                Some(format!(": {}", type_text))
+            } else {
+                None
+            };
+            
+            // Get field line number
+            let field_line = node_line(&field_decl);
+            
+            // Create field definition
+            let field_def = Definition {
+                iden: field_name.to_string(),
+                def_type: DefType::Field,
+                vis: visibility,
+                info: DefInfo {
+                    signature,
+                    parent: Some(name.clone()),
+                    children: Vec::new(),
+                    line_num: Some(field_line),
+                    line_end: None,
+                },
+            };
+            
+            structs.push(field_def);
+        }
     }
     
     Ok(structs)
@@ -330,37 +415,105 @@ fn find_rust_traits(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             Visibility::Private
         };
         
-        // Find trait methods (using function_item instead of function_signature)
+        // Find trait methods (try both approaches as tree-sitter grammar might vary)
+        // First, try with function_item
         let method_query = "(trait_item body: (declaration_list (function_item) @method))";
-        let method_nodes = query_nodes(&node, source, method_query)?;
+        let mut method_nodes = query_nodes(&node, source, method_query)?;
+        
+        // Alternate approaches if needed
+        if method_nodes.is_empty() {
+            // Try to get any children of the declaration list as a fallback
+            let alt_query = "(trait_item body: (declaration_list (_) @item))";
+            method_nodes = query_nodes(&node, source, alt_query)?;
+        }
         
         let mut method_names = Vec::new();
+        let mut trait_methods = Vec::new();
+        
         for method_node in &method_nodes {
-            let method_name_query = "(function_item name: (identifier) @name)";
-            let method_name_nodes = query_nodes(method_node, source, method_name_query)?;
+            // Get method name based on node type
+            let kind = method_node.kind();
+            let method_name_nodes = if kind == "function_item" {
+                let method_name_query = "(function_item name: (identifier) @name)";
+                query_nodes(method_node, source, method_name_query)?
+            } else {
+                // Try a generic approach for unknown node types
+                Vec::new()
+            };
             
             if !method_name_nodes.is_empty() {
                 let method_name = node_text(&method_name_nodes[0], source).to_string();
-                method_names.push(method_name);
+                method_names.push(method_name.clone());
+                
+                // Get method signature based on node type
+                let params_nodes = if kind == "function_item" {
+                    let params_query = "(function_item parameters: (parameters) @params)";
+                    query_nodes(method_node, source, params_query)?
+                } else {
+                    Vec::new()
+                };
+                
+                let mut signature = String::new();
+                if !params_nodes.is_empty() {
+                    signature.push_str(node_text(&params_nodes[0], source));
+                    
+                    // Add return type if present based on node type
+                    let return_nodes = if kind == "function_item" {
+                        let return_query = "(function_item return_type: (_) @return)";
+                        query_nodes(method_node, source, return_query)?
+                    } else {
+                        Vec::new()
+                    };
+                    
+                    if !return_nodes.is_empty() {
+                        signature.push_str(" -> ");
+                        signature.push_str(node_text(&return_nodes[0], source));
+                    }
+                }
+                
+                // Get method line number
+                let method_line = node_line(method_node);
+                
+                // Create method definition
+                let method_def = Definition {
+                    iden: method_name,
+                    def_type: DefType::Method,
+                    vis: Visibility::Public, // Methods in traits are implicitly public
+                    info: DefInfo {
+                        signature: if signature.is_empty() { None } else { Some(signature) },
+                        parent: Some(name.clone()),
+                        children: Vec::new(),
+                        line_num: Some(method_line),
+                        line_end: None,
+                    },
+                };
+                
+                trait_methods.push(method_def);
             }
         }
         
+        // Get trait start and end line numbers
+        let trait_start_line = node_line(&node);
+        let trait_end_line = node.end_position().row as u32 + 1;
+        
         // Create trait definition
-        let line_num = node_line(&node);
         let def = Definition {
-            iden: name,
+            iden: name.clone(),
             def_type: DefType::Trait,
             vis: visibility,
             info: DefInfo {
                 signature: None,
                 parent: None,
                 children: method_names,
-                line_num: Some(line_num),
-                line_end: None,
+                line_num: Some(trait_start_line),
+                line_end: Some(trait_end_line),
             },
         };
         
         traits.push(def);
+        
+        // Add all trait methods to the result
+        traits.extend(trait_methods);
     }
     
     Ok(traits)
@@ -465,7 +618,7 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                     // Create method definition with a parent link to the impl block
                     let method_def = Definition {
                         iden: method_name.clone(),
-                        def_type: DefType::Function,
+                        def_type: DefType::Method,
                         vis: visibility,
                         info: DefInfo {
                             signature: if signature.is_empty() { None } else { Some(signature) },

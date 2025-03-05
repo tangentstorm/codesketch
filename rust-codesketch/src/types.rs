@@ -13,6 +13,8 @@ pub enum DefType {
     Macro,
     Constant,
     TypeAlias,
+    Field,
+    Method,
     #[serde(untagged)]
     Other(String),
 }
