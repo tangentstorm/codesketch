@@ -4,6 +4,7 @@ module CodeSketch.Json
   , pathInfoToJSON
   , rootToJSON
   , rootToJSONString
+  , rootToTextOutline
   ) where
 
 import CodeSketch.Types
@@ -59,3 +60,30 @@ rootToJSON = toJSON
 -- | Convert the root structure to a JSON string
 rootToJSONString :: Root -> String
 rootToJSONString = BL.unpack . encode
+
+-- | Convert a definition to a text line with an appropriate symbol
+definitionToTextLine :: Definition -> String
+definitionToTextLine def = 
+  let symbol = case defType def of
+        Module   -> "[M]"
+        Struct   -> "[S]"
+        Enum     -> "[E]"
+        Function -> "[F]"
+        Trait    -> "[T]"
+        Impl     -> "[I]"
+        Other _  -> "[?]"
+      visSymbol = case visibility def of
+        Public    -> "+"
+        Protected -> "~"
+        Private   -> "-"
+  in symbol ++ " " ++ visSymbol ++ " " ++ iden def
+
+-- | Convert a path_info to a text outline with indentation
+pathInfoToTextOutline :: PathInfo -> String
+pathInfoToTextOutline pi =
+  path pi ++ ":\n" ++ 
+  concatMap (\def -> "  " ++ definitionToTextLine def ++ "\n") (defs pi)
+
+-- | Convert the root structure to a text outline
+rootToTextOutline :: Root -> String
+rootToTextOutline = concatMap pathInfoToTextOutline

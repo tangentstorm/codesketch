@@ -24,11 +24,27 @@ cabal install
 codesketch /path/to/code
 ```
 
-Output is a JSON dump of all types and definitions in your code.
+Output is a human-readable text outline of all types and definitions in your code.
 
 ### Options
 
+- `--json` or `-j`: Output in JSON format
 - `--debug` or `-d`: Enable debug output (to stderr)
+
+### Example Text Output
+
+```
+/path/to/file.rs:
+  [S] + MyStruct
+  [F] - my_private_function
+  [F] + my_public_function
+  [T] + MyTrait
+  [M] + my_module
+```
+
+Legend:
+- Type indicators: `[S]` struct, `[E]` enum, `[F]` function, `[T]` trait, `[M]` module, `[I]` impl
+- Visibility: `+` public, `~` protected, `-` private
 
 ## Structure
 

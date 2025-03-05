@@ -2,7 +2,7 @@ module Main (main) where
 
 import CodeSketch.Types
 import CodeSketch.Scanner (processPath)
-import CodeSketch.Json (rootToJSONString)
+import CodeSketch.Json (rootToJSONString, rootToTextOutline)
 import CodeSketch.Errors as Errors
 
 import Options.Applicative
@@ -15,6 +15,7 @@ import Paths_codesketch (version)
 data Options = Options
   { optPath :: FilePath
   , optDebug :: Bool
+  , optJson :: Bool
   }
 
 -- | Command line parser
@@ -28,6 +29,11 @@ optionsParser = Options
       ( long "debug"
       <> short 'd'
       <> help "Enable debug output"
+      )
+  <*> switch
+      ( long "json"
+      <> short 'j'
+      <> help "Output in JSON format (default is human-readable text)"
       )
 
 -- | Main entry point
@@ -53,8 +59,10 @@ main = do
   when (null results) $
     Errors.warn "No definitions found or no supported files in path."
   
-  -- Output JSON to stdout
-  putStrLn $ rootToJSONString results
+  -- Output to stdout based on format
+  if optJson options
+    then putStrLn $ rootToJSONString results
+    else putStr $ rootToTextOutline results
   
   where
     opts = info (optionsParser <**> helper)
