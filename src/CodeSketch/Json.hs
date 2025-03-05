@@ -198,9 +198,9 @@ definitionsToTextTree definitions parentPath =
           -- Sort children by line number
           sortedChildDefs = sortByLineNumber childDefs
           
-          -- Generate output with line number before indentation
-          formattedDef = indent ++ formatDefinition def 
-          topLine = addLineNumber def formattedDef ++ "\n"
+          -- Generate output with line number before indentation and content indented
+          formattedDef = formatDefinition def 
+          topLine = addLineNumber def (indent ++ formattedDef) ++ "\n"
           
           childLines = if null childDefs 
                         then "" 
