@@ -30,9 +30,22 @@ Output is a human-readable text outline of all types and definitions in your cod
 
 ```
 Options:
-  -f, --format <FORMAT>  Output format (json or text) [default: text]
+  -f, --format <FORMAT>  Output format (json, text, or interactive) [default: text]
   -h, --help             Print help
   -V, --version          Print version
+```
+
+### Interactive Mode
+
+The interactive mode (`-f interactive`) provides a TUI browser to explore code:
+
+- Navigate up/down with arrow keys
+- Expand/collapse nodes with Tab
+- View source code of selected items
+- Exit with 'q'
+
+```
+codesketch -f interactive /path/to/code
 ```
 
 ### Example Text Output
