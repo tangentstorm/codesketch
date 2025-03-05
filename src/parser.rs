@@ -246,6 +246,15 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             field_children.push(field_name.to_string());
         }
         
+        // For tuple structs, we'll just detect if it's a tuple struct
+        let tuple_query = "(struct_item body: (ordered_field_declaration_list))";
+        let tuple_nodes = query_nodes(&node, source, tuple_query)?;
+        
+        if !tuple_nodes.is_empty() {
+            // Just mark that it's a tuple struct with a special entry
+            field_children.push("tuple_struct".to_string());
+        }
+        
         // Get struct start and end line numbers
         let struct_start_line = node_line(&node);
         let struct_end_line = node.end_position().row as u32 + 1;
@@ -271,10 +280,7 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
         // Map to track which fields we've already processed
         let mut processed_fields = std::collections::HashSet::new();
         
-        // Let's simplify this whole approach
-        // For now, let's just extract field names and not worry about visibility details
-        // We'll create a generic approach that works for both pub and private fields
-        // First, get all field declarations
+        // Process normal struct fields
         let all_fields_query = "(struct_item body: (field_declaration_list (field_declaration) @decl))";
         let all_field_decls = query_nodes(&node, source, all_fields_query)?;
         
@@ -311,7 +317,7 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             
             let signature = if !type_nodes.is_empty() {
                 let type_text = node_text(&type_nodes[0], source);
-                Some(format!(": {}", type_text))
+                Some(type_text.to_string())
             } else {
                 None
             };
@@ -329,6 +335,32 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                     parent: Some(name.clone()),
                     children: Vec::new(),
                     line_num: Some(field_line),
+                    line_end: None,
+                },
+            };
+            
+            structs.push(field_def);
+        }
+
+        // Process tuple struct fields - add a special field showing the tuple struct signature
+        let tuple_fields_query = "(struct_item body: (ordered_field_declaration_list) @list)";
+        let tuple_lists = query_nodes(&node, source, tuple_fields_query)?;
+        
+        if !tuple_lists.is_empty() {
+            // Get the tuple signature by extracting the whole ordered_field_declaration_list
+            let tuple_list = &tuple_lists[0];
+            let tuple_signature = node_text(tuple_list, source).trim().to_string();
+            
+            // Add just one special field showing the tuple signature
+            let field_def = Definition {
+                iden: "tuple".to_string(),
+                def_type: DefType::Field,
+                vis: Visibility::Private, // We'll use the struct's visibility
+                info: DefInfo {
+                    signature: Some(tuple_signature),
+                    parent: Some(name.clone()),
+                    children: Vec::new(),
+                    line_num: Some(struct_start_line),
                     line_end: None,
                 },
             };
