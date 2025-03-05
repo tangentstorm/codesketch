@@ -192,6 +192,60 @@ extractRustStructs content =
         findIndexHelper _ [] _ = Nothing
         findIndexHelper p (x:xs) i = if p x then Just i else findIndexHelper p xs (i+1)
 
+-- | Extract Rust implementation blocks
+extractRustImpls :: String -> [Definition]
+extractRustImpls content = 
+  let lns = zip [1..] (splitLines content)
+      implLines = filter (isImplDeclaration . snd) lns
+  in map extractImplDef implLines
+  where
+    isImplDeclaration line = 
+      ("impl " `isInfixOf` line) && ("{" `isInfixOf` line)
+    
+    extractImplDef (_, line) =
+      let targetName = extractImplTarget line
+          name = case targetName of
+                   Just n -> n
+                   Nothing -> "anonymous"
+      in Definition name Impl Private emptyDefInfo
+    
+    -- Try to extract the type name being implemented
+    extractImplTarget :: String -> Maybe String
+    extractImplTarget line =
+      let implPos = findSubstring "impl " line
+          startPos = if implPos >= 0 then implPos + 5 else 0
+          rest = drop startPos line
+          cleanedRest = stripSpace rest
+          -- Check for trait implementation (impl Trait for Type)
+          forPos = findSubstring " for " cleanedRest
+      in if forPos >= 0 && forPos < length cleanedRest
+           then 
+             -- This is a trait implementation (impl Trait for Type)
+             let typeStart = forPos + 5
+                 typeStr = drop typeStart cleanedRest
+                 typeName = takeWhile (\c -> isIdentChar c || c == ':') (stripSpace typeStr)
+             in if null typeName then Nothing else Just typeName
+           else
+             -- This is a direct implementation (impl Type)
+             let typeName = takeWhile (\c -> isIdentChar c || c == ':') (stripSpace cleanedRest)
+             in if null typeName then Nothing else Just typeName
+    
+    findSubstring :: String -> String -> Int
+    findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
+    
+    orElse :: Maybe a -> a -> a
+    orElse (Just x) _ = x
+    orElse Nothing  y = y
+    
+    findIndex :: (a -> Bool) -> [a] -> Maybe Int
+    findIndex p xs = findIndexHelper p xs 0
+      where
+        findIndexHelper _ [] _ = Nothing
+        findIndexHelper p (x:xs) i = if p x then Just i else findIndexHelper p xs (i+1)
+    
+    stripSpace :: String -> String
+    stripSpace = dropWhile isSpace . reverse . dropWhile isSpace . reverse
+
 -- | Extract Rust module definitions
 extractRustModules :: String -> [Definition]
 extractRustModules content = 
@@ -239,7 +293,8 @@ extractDefinitions filename = do
           let functions = extractRustFunctions content
               structs = extractRustStructs content
               modules = extractRustModules content
-          return $ functions ++ structs ++ modules
+              impls = extractRustImpls content
+          return $ functions ++ structs ++ modules ++ impls
         else return []
 
 -- Helper functions

@@ -20,6 +20,12 @@ pub mod test_module {
         }
     }
 
+    impl TestTrait for TestStruct {
+        fn trait_method(&self) -> bool {
+            true
+        }
+    }
+
     pub fn public_function(arg: i32) -> i32 {
         arg * 2
     }
