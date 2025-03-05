@@ -1,26 +1,26 @@
 # CLAUDE.md - Assistance Guide
 
 ## Build & Test Commands
-- Build: `cabal build` - Build the project
-- Run: `cabal run codesketch -- /path/to/code` - Run on a directory/file
-- Install: `cabal install` - Install the binary
-- Test (all): `cabal test` - Run all tests
-- Clean: `cabal clean` - Clean build artifacts
-- Sample: `cabal run codesketch -- test/test_rust.rs` - Run on test file
-- Make: `make build`, `make test`, etc. - Use Makefile shortcuts
+- Build: `cargo build` - Build the project
+- Run: `cargo run -- /path/to/code` - Run on a directory/file
+- Run (with format): `cargo run -- -f json /path/to/code` - Output in JSON format
+- Install: `cargo install --path .` - Install the binary
+- Clean: `cargo clean` - Clean build artifacts
+- Sample: `cargo run -- samples/base.rs` - Run on a sample file
+- Release Build: `cargo build --release` - Build optimized version
 
 ## Code Style Guidelines
-- **Languages**: Haskell project analyzing Rust, Python, TypeScript/JavaScript
-- **Formatting**: Follow Haskell conventions with 2-space indentation
-- **Naming**: camelCase for values/functions, PascalCase for types/modules
-- **Error Handling**: Use Maybe/Either types and explicit error handling
-- **Imports**: Group by external/standard/internal; qualified imports when needed
-- **Types**: Use strong typing with algebraic data types; document types with Haddock
-- **Comments**: Use -- for line comments, {- -} for block comments
-- **Testing**: Write unit tests with Hspec
+- **Language**: Rust
+- **Formatting**: Follow Rust conventions with 4-space indentation
+- **Naming**: snake_case for functions/variables, PascalCase for types/structs/enums
+- **Error Handling**: Use Result<T, E> for recoverable errors and Option<T> for nullable values
+- **Imports**: Group by external crates then internal modules
+- **Types**: Use strong typing with enums and structs
+- **Comments**: Use standard Rust doc comments (///) for documentation
+- **Testing**: Write tests using Rust's built-in testing framework
 
 ## Project Implementation
-- Uses Haskell string processing to parse and analyze code
+- Uses tree-sitter to parse and analyze Rust code
 - Supports Rust files currently, with plans for Python and TS/JS
-- Outputs structured JSON following the schema defined in README.md
-- Extracts functions, classes/structs, traits, and modules
+- Outputs structured JSON or human-readable text
+- Extracts functions, structs, traits, impl blocks, modules and their relationships
