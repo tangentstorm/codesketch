@@ -41,7 +41,9 @@ The interactive mode (`-f interactive`) provides a TUI browser to explore code:
 
 - Navigate up/down with arrow keys
 - Expand/collapse nodes with Tab
-- View source code of selected items
+- View source code of selected items with syntax highlighting
+- Search through code elements by pressing `/`
+- Navigate between search results with up/down arrows
 - Exit with 'q'
 
 ```
