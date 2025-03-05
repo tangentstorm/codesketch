@@ -25,8 +25,25 @@ pub fn output_text(root: &Root) -> Result<()> {
         });
         
         // Filter top-level definitions (no parent)
+        // Also filter out functions that are methods of impl blocks
         let top_level_defs: Vec<_> = defs.iter()
-            .filter(|d| d.info.parent.is_none())
+            .filter(|d| {
+                // Keep if no parent
+                if d.info.parent.is_none() {
+                    // For functions, skip those that belong to impl blocks
+                    if d.def_type == DefType::Function {
+                        // Check if this function is a method of any impl block
+                        !defs.iter().any(|impl_def| 
+                            impl_def.def_type == DefType::Impl && 
+                            impl_def.info.children.contains(&d.iden)
+                        )
+                    } else {
+                        true
+                    }
+                } else {
+                    false
+                }
+            })
             .collect();
         
         // Output top-level definitions and their children

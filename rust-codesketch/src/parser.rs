@@ -84,12 +84,20 @@ fn parse_rust_file(path: &Path) -> Result<Option<PathInfo>> {
     let root_node = tree.root_node();
     
     // Extract all definitions
-    let functions = find_rust_functions(&root_node, &source)?;
+    let mut functions = find_rust_functions(&root_node, &source)?;
     let structs = find_rust_structs(&root_node, &source)?;
     let enums = find_rust_enums(&root_node, &source)?;
     let traits = find_rust_traits(&root_node, &source)?;
     let impls = find_rust_impls(&root_node, &source)?;
     let modules = find_rust_modules(&root_node, &source)?;
+    
+    // Filter out functions that are methods in impl blocks
+    let impl_methods: Vec<String> = impls.iter()
+        .flat_map(|impl_def| impl_def.info.children.clone())
+        .collect();
+    
+    // Only keep functions that aren't methods of impls
+    functions.retain(|func| !impl_methods.contains(&func.iden));
     
     // Combine all definitions
     let mut all_defs = Vec::new();
