@@ -46,9 +46,19 @@ pub fn output_text(root: &Root) -> Result<()> {
             })
             .collect();
         
-        // Output top-level definitions and their children
+        // Generate all lines with their indentation level and then sort
+        let mut lines = Vec::new();
         for def in top_level_defs {
-            print_definition(def, &defs, 0);
+            collect_definition_lines(def, &defs, 0, &mut lines);
+        }
+        
+        // Sort by line number and remove duplicates
+        lines.sort_by(|a, b| a.0.cmp(&b.0));
+        lines.dedup();
+        
+        // Print all lines
+        for (_, line) in lines {
+            println!("{}", line);
         }
         
         println!();
@@ -57,8 +67,8 @@ pub fn output_text(root: &Root) -> Result<()> {
     Ok(())
 }
 
-// Print a definition with proper indentation
-fn print_definition(def: &Definition, all_defs: &[Definition], depth: usize) {
+// Collect all output lines for a definition
+fn collect_definition_lines(def: &Definition, all_defs: &[Definition], depth: usize, lines: &mut Vec<(u32, String)>) {
     let indent = "  ".repeat(depth);
     
     // Format line number
@@ -103,18 +113,34 @@ fn print_definition(def: &Definition, all_defs: &[Definition], depth: usize) {
         "".normal()
     };
     
-    // Print the definition
-    println!("{}{}{}{}{}{}", line_num, indent, vis_str, type_str, name_str, sig_str);
+    // Format full line
+    let formatted_line = format!("{}{}{}{}{}{}", line_num, indent, vis_str, type_str, name_str, sig_str);
     
-    // Find and print children
+    // Add to lines collection with line number for sorting
+    if let Some(line_number) = def.info.line_num {
+        lines.push((line_number, formatted_line));
+    }
+    
+    // Find and collect children
     let children: Vec<_> = all_defs.iter()
         .filter(|d| {
             // Include definitions that have this def as parent
             if let Some(parent) = &d.info.parent {
-                parent == &def.iden
-            } else {
-                false
+                // Basic parent check
+                if parent == &def.iden {
+                    // For impl blocks, also check line range
+                    if def.def_type == DefType::Impl {
+                        if let (Some(start), Some(end)) = (def.info.line_num, def.info.line_end) {
+                            if let Some(child_line) = d.info.line_num {
+                                // Only include methods that are within this impl block's line range
+                                return child_line >= start && child_line <= end;
+                            }
+                        }
+                    }
+                    return true;
+                }
             }
+            false
         })
         .collect();
     
@@ -126,8 +152,9 @@ fn print_definition(def: &Definition, all_defs: &[Definition], depth: usize) {
         a_line.cmp(&b_line)
     });
     
-    // Recursively print children
+    // Recursively collect children lines
     for child in sorted_children {
-        print_definition(child, all_defs, depth + 1);
+        collect_definition_lines(child, all_defs, depth + 1, lines);
     }
 }
+

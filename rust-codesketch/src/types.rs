@@ -68,6 +68,8 @@ pub struct DefInfo {
     pub children: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub line_num: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line_end: Option<u32>,
 }
 
 impl Default for DefInfo {
@@ -77,6 +79,7 @@ impl Default for DefInfo {
             parent: None,
             children: Vec::new(),
             line_num: None,
+            line_end: None,
         }
     }
 }

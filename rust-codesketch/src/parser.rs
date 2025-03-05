@@ -186,6 +186,7 @@ fn find_rust_functions(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 parent: None,
                 children: Vec::new(),
                 line_num: Some(line_num),
+                line_end: None,
             },
         };
         
@@ -233,6 +234,7 @@ fn find_rust_structs(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 parent: None,
                 children: Vec::new(),
                 line_num: Some(line_num),
+                line_end: None,
             },
         };
         
@@ -280,6 +282,7 @@ fn find_rust_enums(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 parent: None,
                 children: Vec::new(),
                 line_num: Some(line_num),
+                line_end: None,
             },
         };
         
@@ -342,6 +345,7 @@ fn find_rust_traits(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 parent: None,
                 children: method_names,
                 line_num: Some(line_num),
+                line_end: None,
             },
         };
         
@@ -398,6 +402,10 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             None => None,
         };
         
+        // Get impl block start and end line numbers
+        let impl_start_line = node_line(&node);
+        let impl_end_line = node.end_position().row as u32 + 1;
+        
         // Find methods within the impl block
         let method_query = "(impl_item body: (declaration_list (function_item) @method))";
         let method_nodes = query_nodes(&node, source, method_query)?;
@@ -411,56 +419,61 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 let method_name = node_text(&method_name_nodes[0], source).to_string();
                 method_names.push(method_name.clone());
                 
-                // Also create a function definition for each method 
-                // (we'll link it to its parent impl later)
-                let line_num = node_line(method_node);
-                let vis_query = "(function_item (visibility_modifier) @vis)";
-                let vis_nodes = query_nodes(method_node, source, vis_query)?;
+                // Get method line number
+                let method_line = node_line(method_node);
                 
-                let visibility = if !vis_nodes.is_empty() {
-                    let vis_text = node_text(&vis_nodes[0], source);
-                    if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
-                } else {
-                    Visibility::Private
-                };
-                
-                // Get function signature
-                let params_query = "(function_item parameters: (parameters) @params)";
-                let params_nodes = query_nodes(method_node, source, params_query)?;
-                
-                let mut signature = String::new();
-                if !params_nodes.is_empty() {
-                    signature.push_str(node_text(&params_nodes[0], source));
+                // Check if the method is within this impl block's line range
+                if method_line >= impl_start_line && method_line <= impl_end_line {
+                    // Also create a function definition for each method 
+                    // (we'll link it to its parent impl later)
+                    let vis_query = "(function_item (visibility_modifier) @vis)";
+                    let vis_nodes = query_nodes(method_node, source, vis_query)?;
                     
-                    // Add return type if present
-                    let return_query = "(function_item return_type: (type_identifier) @return)";
-                    let return_nodes = query_nodes(method_node, source, return_query)?;
+                    let visibility = if !vis_nodes.is_empty() {
+                        let vis_text = node_text(&vis_nodes[0], source);
+                        if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
+                    } else {
+                        Visibility::Private
+                    };
                     
-                    if !return_nodes.is_empty() {
-                        signature.push_str(" -> ");
-                        signature.push_str(node_text(&return_nodes[0], source));
+                    // Get function signature
+                    let params_query = "(function_item parameters: (parameters) @params)";
+                    let params_nodes = query_nodes(method_node, source, params_query)?;
+                    
+                    let mut signature = String::new();
+                    if !params_nodes.is_empty() {
+                        signature.push_str(node_text(&params_nodes[0], source));
+                        
+                        // Add return type if present
+                        let return_query = "(function_item return_type: (type_identifier) @return)";
+                        let return_nodes = query_nodes(method_node, source, return_query)?;
+                        
+                        if !return_nodes.is_empty() {
+                            signature.push_str(" -> ");
+                            signature.push_str(node_text(&return_nodes[0], source));
+                        }
                     }
+                    
+                    // Create method definition with a parent link to the impl block
+                    let method_def = Definition {
+                        iden: method_name.clone(),
+                        def_type: DefType::Function,
+                        vis: visibility,
+                        info: DefInfo {
+                            signature: if signature.is_empty() { None } else { Some(signature) },
+                            parent: Some(unique_id.clone()),  // Link to parent impl
+                            children: Vec::new(),
+                            line_num: Some(method_line),
+                            line_end: None,
+                        },
+                    };
+                    
+                    methods.push(method_def);
                 }
-                
-                // Create method definition with a parent link to the impl block
-                let method_def = Definition {
-                    iden: method_name.clone(),
-                    def_type: DefType::Function,
-                    vis: visibility,
-                    info: DefInfo {
-                        signature: if signature.is_empty() { None } else { Some(signature) },
-                        parent: Some(unique_id.clone()),  // Link to parent impl
-                        children: Vec::new(),
-                        line_num: Some(line_num),
-                    },
-                };
-                
-                methods.push(method_def);
             }
         }
         
-        // Create impl definition
-        let line_num = node_line(&node);
+        // Create impl definition with line range information
         let def = Definition {
             iden: unique_id,
             def_type: DefType::Impl,
@@ -469,7 +482,8 @@ fn find_rust_impls(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 signature,
                 parent: None,
                 children: method_names,
-                line_num: Some(line_num),
+                line_num: Some(impl_start_line),
+                line_end: Some(impl_end_line),
             },
         };
         
@@ -520,6 +534,7 @@ fn find_rust_modules(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 parent: None,
                 children: Vec::new(),
                 line_num: Some(line_num),
+                line_end: None,
             },
         };
         
