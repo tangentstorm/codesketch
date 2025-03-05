@@ -12,6 +12,39 @@ import Data.Aeson
 import Data.Aeson.Encoding (encodingToLazyByteString)
 import qualified Data.ByteString.Lazy.Char8 as BL
 
+-- ANSI color codes
+type Color = String
+
+reset :: Color
+reset = "\ESC[0m"
+
+bold :: Color
+bold = "\ESC[1m"
+
+dim :: Color
+dim = "\ESC[2m"
+
+red :: Color
+red = "\ESC[31m"
+
+green :: Color
+green = "\ESC[32m"
+
+yellow :: Color
+yellow = "\ESC[33m"
+
+blue :: Color
+blue = "\ESC[34m"
+
+magenta :: Color
+magenta = "\ESC[35m"
+
+cyan :: Color
+cyan = "\ESC[36m"
+
+colorize :: Color -> String -> String
+colorize color text = color ++ text ++ reset
+
 -- | Convert a definition to JSON
 instance ToJSON Definition where
   toJSON def = object
@@ -64,40 +97,47 @@ rootToJSONString = BL.unpack . encode
 -- | Convert a definition to a readable text line
 definitionToTextLine :: Definition -> String
 definitionToTextLine def = 
-  let -- Type description
-      typeDesc = case defType def of
-        Module   -> "module"
-        Struct   -> "struct"
-        Enum     -> "enum"
-        Function -> "fn"
-        Trait    -> "trait"
-        Impl     -> "impl"
-        Other s  -> s
+  let -- Type description and color
+      (typeDesc, typeColor) = case defType def of
+        Module   -> ("module", cyan)
+        Struct   -> ("struct", green)
+        Enum     -> ("enum", green)
+        Function -> ("fn", yellow)
+        Trait    -> ("trait", magenta)
+        Impl     -> ("impl", blue)
+        Other s  -> (s, reset)
       
-      -- Visibility description
-      visDesc = case visibility def of
-        Public    -> "public"
-        Protected -> "protected"
-        Private   -> "private"
+      -- Visibility description and color
+      (visDesc, visColor) = case visibility def of
+        Public    -> ("public", green)
+        Protected -> ("protected", yellow)
+        Private   -> ("private", dim)
       
-      -- Name
-      name = iden def
+      -- Name with appropriate styling
+      coloredName = case defType def of
+        Module -> colorize (bold ++ cyan) (iden def)
+        Struct -> colorize (bold ++ green) (iden def)
+        Enum   -> colorize (bold ++ green) (iden def)
+        Trait  -> colorize (bold ++ magenta) (iden def)
+        _      -> colorize bold (iden def)
       
       -- Signature text for functions and impl blocks
       sigText = case defType def of
         Function -> case signature (defInfo def) of
-                     Just sig -> " " ++ sig
+                     Just sig -> " " ++ colorize dim sig
                      Nothing -> ""
         Impl -> case signature (defInfo def) of
-                 Just sig -> " " ++ sig
+                 Just sig -> " " ++ colorize cyan sig
                  Nothing -> ""
         _ -> ""
-  in visDesc ++ " " ++ typeDesc ++ " " ++ name ++ sigText
+  in colorize visColor visDesc ++ " " ++ 
+     colorize typeColor typeDesc ++ " " ++ 
+     coloredName ++ sigText
 
 -- | Convert a path_info to a text outline with indentation
 pathInfoToTextOutline :: PathInfo -> String
 pathInfoToTextOutline pi =
-  path pi ++ ":\n" ++ 
+  colorize (bold ++ blue) (path pi) ++ ":\n" ++ 
   definitionsToTextTree (defs pi) []
 
 -- | Build a hierarchical text tree of definitions
