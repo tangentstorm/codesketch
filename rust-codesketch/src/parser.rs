@@ -90,6 +90,9 @@ fn parse_rust_file(path: &Path) -> Result<Option<PathInfo>> {
     let traits = find_rust_traits(&root_node, &source)?;
     let impls = find_rust_impls(&root_node, &source)?;
     let modules = find_rust_modules(&root_node, &source)?;
+    let type_aliases = find_rust_type_aliases(&root_node, &source)?;
+    let macros = find_rust_macros(&root_node, &source)?;
+    let constants = find_rust_constants(&root_node, &source)?;
     
     // Filter out functions that are methods in impl blocks
     let impl_methods: Vec<String> = impls.iter()
@@ -107,6 +110,9 @@ fn parse_rust_file(path: &Path) -> Result<Option<PathInfo>> {
     all_defs.extend(traits);
     all_defs.extend(impls);
     all_defs.extend(modules);
+    all_defs.extend(type_aliases);
+    all_defs.extend(macros);
+    all_defs.extend(constants);
     
     // Build parent-child relationships
     let defs = build_definition_tree(all_defs);
@@ -135,6 +141,9 @@ fn find_rust_functions(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
                 }
             }
         }
+        
+        // Debug the node kind and text
+        // println!("Function node: kind={}, text={}", node.kind(), node_text(&node, source));
         
         // Get function name
         let name_query = "(function_item name: (identifier) @name)";
@@ -539,6 +548,160 @@ fn find_rust_modules(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
     }
     
     Ok(modules)
+}
+
+// Find all Rust type aliases
+fn find_rust_type_aliases(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
+    let type_nodes = query_nodes(root, source, "(type_item) @type")?;
+    
+    let mut types = Vec::new();
+    for node in type_nodes {
+        // Get type name
+        let name_query = "(type_item name: (type_identifier) @name)";
+        let name_nodes = query_nodes(&node, source, name_query)?;
+        
+        let name = if !name_nodes.is_empty() {
+            node_text(&name_nodes[0], source).to_string()
+        } else {
+            "unknown".to_string()
+        };
+        
+        // Get visibility
+        let vis_query = "(type_item (visibility_modifier) @vis)";
+        let vis_nodes = query_nodes(&node, source, vis_query)?;
+        
+        let visibility = if !vis_nodes.is_empty() {
+            let vis_text = node_text(&vis_nodes[0], source);
+            if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
+        } else {
+            Visibility::Private
+        };
+        
+        // Get aliased type
+        let type_query = "(type_item type: (_) @aliased_type)";
+        let type_nodes = query_nodes(&node, source, type_query)?;
+        
+        let signature = if !type_nodes.is_empty() {
+            let aliased_type = node_text(&type_nodes[0], source);
+            Some(format!("= {}", aliased_type))
+        } else {
+            None
+        };
+        
+        // Create type definition
+        let line_num = node_line(&node);
+        let def = Definition {
+            iden: name,
+            def_type: DefType::TypeAlias,
+            vis: visibility,
+            info: DefInfo {
+                signature,
+                parent: None,
+                children: Vec::new(),
+                line_num: Some(line_num),
+                line_end: None,
+            },
+        };
+        
+        types.push(def);
+    }
+    
+    Ok(types)
+}
+
+// Find Rust macros
+fn find_rust_macros(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
+    let macro_nodes = query_nodes(root, source, "(macro_definition) @macro")?;
+    
+    let mut macros = Vec::new();
+    for node in macro_nodes {
+        // Get macro name
+        let name_query = "(macro_definition name: (identifier) @name)";
+        let name_nodes = query_nodes(&node, source, name_query)?;
+        
+        let name = if !name_nodes.is_empty() {
+            node_text(&name_nodes[0], source).to_string()
+        } else {
+            "unknown".to_string()
+        };
+        
+        // Create macro definition
+        let line_num = node_line(&node);
+        let def = Definition {
+            iden: name,
+            def_type: DefType::Macro,
+            vis: Visibility::Public, // Assume macros are public
+            info: DefInfo {
+                signature: None,
+                parent: None,
+                children: Vec::new(),
+                line_num: Some(line_num),
+                line_end: None,
+            },
+        };
+        
+        macros.push(def);
+    }
+    
+    Ok(macros)
+}
+
+// Find Rust constants
+fn find_rust_constants(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
+    let const_nodes = query_nodes(root, source, "(const_item) @const")?;
+    
+    let mut constants = Vec::new();
+    for node in const_nodes {
+        // Get constant name
+        let name_query = "(const_item name: (identifier) @name)";
+        let name_nodes = query_nodes(&node, source, name_query)?;
+        
+        let name = if !name_nodes.is_empty() {
+            node_text(&name_nodes[0], source).to_string()
+        } else {
+            "unknown".to_string()
+        };
+        
+        // Get visibility
+        let vis_query = "(const_item (visibility_modifier) @vis)";
+        let vis_nodes = query_nodes(&node, source, vis_query)?;
+        
+        let visibility = if !vis_nodes.is_empty() {
+            let vis_text = node_text(&vis_nodes[0], source);
+            if vis_text == "pub" { Visibility::Public } else { Visibility::Private }
+        } else {
+            Visibility::Private
+        };
+        
+        // Get type
+        let type_query = "(const_item type: (_) @type)";
+        let type_nodes = query_nodes(&node, source, type_query)?;
+        
+        let signature = if !type_nodes.is_empty() {
+            Some(format!(": {}", node_text(&type_nodes[0], source)))
+        } else {
+            None
+        };
+        
+        // Create constant definition
+        let line_num = node_line(&node);
+        let def = Definition {
+            iden: name,
+            def_type: DefType::Constant,
+            vis: visibility,
+            info: DefInfo {
+                signature,
+                parent: None,
+                children: Vec::new(),
+                line_num: Some(line_num),
+                line_end: None,
+            },
+        };
+        
+        constants.push(def);
+    }
+    
+    Ok(constants)
 }
 
 // Build parent-child relationships between definitions

@@ -10,6 +10,9 @@ pub enum DefType {
     Function,
     Trait,
     Impl,
+    Macro,
+    Constant,
+    TypeAlias,
     #[serde(untagged)]
     Other(String),
 }

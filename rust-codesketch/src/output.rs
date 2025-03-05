@@ -98,18 +98,29 @@ fn collect_definition_lines(def: &Definition, all_defs: &[Definition], depth: us
                 ("impl ".blue().bold(), def.iden.cyan())
             }
         },
+        DefType::Macro => ("macro ".red(), def.iden.red().bold()),
+        DefType::Constant => ("const ".yellow(), def.iden.yellow().bold()),
+        DefType::TypeAlias => ("type ".cyan(), def.iden.cyan().bold()),
         DefType::Other(ref s) => (format!("{} ", s).normal(), def.iden.normal().bold()),
     };
     
-    // Format function signature
-    let sig_str = if def.def_type == DefType::Function {
-        if let Some(sig) = &def.info.signature {
-            format!(" {}", sig).dimmed()
-        } else {
-            "".normal()
-        }
-    } else {
-        "".normal()
+    // Format signature for various types
+    let sig_str = match def.def_type {
+        DefType::Function => {
+            if let Some(sig) = &def.info.signature {
+                format!(" {}", sig).dimmed()
+            } else {
+                "".normal()
+            }
+        },
+        DefType::TypeAlias | DefType::Constant => {
+            if let Some(sig) = &def.info.signature {
+                format!(" {}", sig).dimmed()
+            } else {
+                "".normal()
+            }
+        },
+        _ => "".normal()
     };
     
     // Format full line
