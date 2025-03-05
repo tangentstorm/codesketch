@@ -107,11 +107,11 @@ definitionToTextLine def =
         Impl     -> ("impl", blue)
         Other s  -> (s, reset)
       
-      -- Visibility description and color
+      -- Visibility description and color (Rust-specific)
       (visDesc, visColor) = case visibility def of
-        Public    -> ("public", green)
+        Public    -> ("pub", green)
         Protected -> ("protected", yellow)
-        Private   -> ("private", dim)
+        Private   -> ("", reset)  -- Hide "private" for Rust
       
       -- Name with appropriate styling
       coloredName = case defType def of
@@ -130,7 +130,7 @@ definitionToTextLine def =
                  Just sig -> " " ++ colorize cyan sig
                  Nothing -> ""
         _ -> ""
-  in colorize visColor visDesc ++ " " ++ 
+  in (if null visDesc then "" else colorize visColor visDesc ++ " ") ++ 
      colorize typeColor typeDesc ++ " " ++ 
      coloredName ++ sigText
 
