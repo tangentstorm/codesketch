@@ -5,6 +5,7 @@ use anyhow::Result;
 mod parser;
 mod types;
 mod output;
+mod browser;
 
 /// CodeSketch - Tool for quickly getting a rough outline of the code in your files
 #[derive(Parser)]
@@ -14,7 +15,7 @@ struct Cli {
     #[arg(required = true)]
     paths: Vec<PathBuf>,
 
-    /// Output format (json or text)
+    /// Output format (json, text, or interactive)
     #[arg(short, long, default_value = "text")]
     format: String,
 }
@@ -40,6 +41,7 @@ fn main() -> Result<()> {
     // Output the results
     match cli.format.as_str() {
         "json" => output::output_json(&all_definitions)?,
+        "interactive" => browser::run_browser(all_definitions)?,
         _ => output::output_text(&all_definitions)?,
     }
 

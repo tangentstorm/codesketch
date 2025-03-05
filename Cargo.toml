@@ -16,3 +16,8 @@ anyhow = "1.0.75"
 walkdir = "2.4.0"
 termcolor = "1.4.0"
 colored = "2.0.4"
+
+# Interactive browser dependencies
+ratatui = "0.25.0"
+crossterm = "0.27.0"
+syntect = "5.1.0"
