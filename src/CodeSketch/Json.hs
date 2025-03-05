@@ -83,11 +83,14 @@ definitionToTextLine def =
       -- Name
       name = iden def
       
-      -- Function signature if available
+      -- Signature text for functions and impl blocks
       sigText = case defType def of
         Function -> case signature (defInfo def) of
                      Just sig -> " " ++ sig
                      Nothing -> ""
+        Impl -> case signature (defInfo def) of
+                 Just sig -> " " ++ sig
+                 Nothing -> ""
         _ -> ""
   in visDesc ++ " " ++ typeDesc ++ " " ++ name ++ sigText
 
@@ -95,7 +98,42 @@ definitionToTextLine def =
 pathInfoToTextOutline :: PathInfo -> String
 pathInfoToTextOutline pi =
   path pi ++ ":\n" ++ 
-  concatMap (\def -> "  " ++ definitionToTextLine def ++ "\n") (defs pi)
+  definitionsToTextTree (defs pi) []
+
+-- | Build a hierarchical text tree of definitions
+definitionsToTextTree :: [Definition] -> [String] -> String
+definitionsToTextTree definitions parentPath =
+  let 
+    -- Top-level definitions (no parent or parent not in scope)
+    isTopLevel def = case parent (defInfo def) of
+                     Nothing -> True
+                     Just p -> not (p `elem` (map iden definitions))
+    
+    -- Get top-level definitions
+    topDefs = filter isTopLevel definitions
+    
+    -- Process each top-level definition
+    processTopDef def = 
+      let indent = replicate (length parentPath * 2 + 2) ' '
+          -- Get child definitions
+          childrenNames = children (defInfo def)
+          -- Also include definitions that have this def as parent
+          childrenByParent = filter (\d -> case parent (defInfo d) of
+                                          Just p -> p == iden def
+                                          Nothing -> False
+                                    ) definitions
+          -- Combine both sources of children
+          allChildrenNames = childrenNames ++ map iden childrenByParent
+          childDefs = filter (\d -> iden d `elem` allChildrenNames) definitions
+          
+          -- Generate output
+          topLine = indent ++ definitionToTextLine def ++ "\n"
+          childLines = if null childDefs 
+                        then "" 
+                        else definitionsToTextTree childDefs (parentPath ++ [iden def])
+      in topLine ++ childLines
+  in
+    concatMap processTopDef topDefs
 
 -- | Convert the root structure to a text outline
 rootToTextOutline :: Root -> String

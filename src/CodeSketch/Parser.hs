@@ -11,7 +11,11 @@ import Control.Exception (try, SomeException)
 import System.Directory (doesFileExist)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isAlphaNum, isSpace)
-import Data.List (isPrefixOf, isInfixOf, tails, findIndex)
+import Data.List (isPrefixOf, isInfixOf, tails, findIndex, nub, partition,
+                 sortBy, groupBy, nubBy)
+import Data.Function (on)
+import Data.Maybe (mapMaybe)
+import Debug.Trace (trace)
 import CodeSketch.Types (DefInfo(..), emptyDefInfo)
 
 -- | Check if a file is a supported language
@@ -108,7 +112,7 @@ extractRustFunctions content =
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
           -- Try to extract signature
           signature = extractFunctionSignature line
-      in Definition name Function vis (DefInfo signature)
+      in Definition name Function vis (DefInfo signature Nothing [])
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -153,7 +157,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Struct vis emptyDefInfo
+      in Definition name Struct vis (DefInfo Nothing Nothing [])
     
     extractEnumDef (_, line) =
       let isPub = "pub enum " `isInfixOf` line
@@ -165,7 +169,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Enum vis emptyDefInfo
+      in Definition name Enum vis (DefInfo Nothing Nothing [])
     
     extractTraitDef (_, line) =
       let isPub = "pub trait " `isInfixOf` line
@@ -177,7 +181,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Trait vis emptyDefInfo
+      in Definition name Trait vis (DefInfo Nothing Nothing [])
       
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -197,21 +201,32 @@ extractRustImpls :: String -> [Definition]
 extractRustImpls content = 
   let lns = zip [1..] (splitLines content)
       implLines = filter (isImplDeclaration . snd) lns
-  in map extractImplDef implLines
+  in map (extractImplDef . snd) implLines
   where
     isImplDeclaration line = 
       ("impl " `isInfixOf` line) && ("{" `isInfixOf` line)
     
-    extractImplDef (_, line) =
-      let targetName = extractImplTarget line
-          name = case targetName of
-                   Just n -> n
-                   Nothing -> "anonymous"
-      in Definition name Impl Private emptyDefInfo
+    extractImplDef :: String -> Definition
+    extractImplDef line =
+      let implInfo = extractImplInfo line
+          (name, implType, traitName) = implInfo
+          
+          -- Generate a unique identifier for the impl block
+          -- For trait impl, use format "TypeName:TraitName"
+          uniqueId = case traitName of
+                      Just trait -> name ++ ":" ++ trait
+                      Nothing -> name
+                      
+          -- Create an appropriate signature for the impl block
+          implSignature = case traitName of
+                           Just trait -> Just $ trait ++ " for " ++ name
+                           Nothing -> Nothing
+                           
+      in Definition uniqueId Impl Private (DefInfo implSignature Nothing [])
     
-    -- Try to extract the type name being implemented
-    extractImplTarget :: String -> Maybe String
-    extractImplTarget line =
+    -- Extract detailed information about the impl block
+    extractImplInfo :: String -> (String, String, Maybe String)
+    extractImplInfo line =
       let implPos = findSubstring "impl " line
           startPos = if implPos >= 0 then implPos + 5 else 0
           rest = drop startPos line
@@ -221,14 +236,17 @@ extractRustImpls content =
       in if forPos >= 0 && forPos < length cleanedRest
            then 
              -- This is a trait implementation (impl Trait for Type)
-             let typeStart = forPos + 5
+             let traitStr = take forPos cleanedRest
+                 traitName = stripSpace traitStr
+                 
+                 typeStart = forPos + 5
                  typeStr = drop typeStart cleanedRest
                  typeName = takeWhile (\c -> isIdentChar c || c == ':') (stripSpace typeStr)
-             in if null typeName then Nothing else Just typeName
+             in (typeName, "trait_impl", Just traitName)
            else
              -- This is a direct implementation (impl Type)
              let typeName = takeWhile (\c -> isIdentChar c || c == ':') (stripSpace cleanedRest)
-             in if null typeName then Nothing else Just typeName
+             in (typeName, "impl", Nothing)
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -266,7 +284,7 @@ extractRustModules content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Module vis emptyDefInfo
+      in Definition name Module vis (DefInfo Nothing Nothing [])
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -281,6 +299,141 @@ extractRustModules content =
         findIndexHelper _ [] _ = Nothing
         findIndexHelper p (x:xs) i = if p x then Just i else findIndexHelper p xs (i+1)
 
+-- | Build parent-child relationships between definitions
+buildDefinitionTree :: [Definition] -> [Definition]
+buildDefinitionTree defs =
+  -- First pass: process implementation blocks
+  let processedImpls = processImplBlocks defs
+      -- Second pass: process modules and other hierarchical types
+      processedModules = processModules processedImpls
+  in processedModules
+  where
+    -- Find functions that belong to implementations
+    processImplBlocks :: [Definition] -> [Definition]
+    processImplBlocks defs =
+      let impls = filter (\d -> defType d == Impl) defs
+          functions = filter (\d -> defType d == Function) defs
+      in foldr processImpl defs impls
+    
+    -- For each implementation, find its methods and update relationships
+    processImpl :: Definition -> [Definition] -> [Definition]
+    processImpl impl defs = 
+      let implName = iden impl
+          baseName = case break (==':') implName of
+                      (base, _) -> base  -- Gets the part before ':' if it's a trait impl
+                                         -- or the whole name if there's no ':'
+                                         
+          -- For trait impls, get the trait name
+          traitName = case signature (defInfo impl) of
+                        Just sig -> case words sig of
+                                     (trait:_:_) -> Just trait  -- First word in "Trait for Type"
+                                     _ -> Nothing
+                        Nothing -> Nothing
+          
+          -- Find methods that are likely part of this implementation
+          candidateMethods = filter (defType >>> (==Function)) defs
+          
+          -- Apply heuristics to determine which methods belong to this impl
+          -- In a real implementation with full AST parsing, we would have more accurate information
+          methods = filter (belongsToImpl baseName traitName) candidateMethods
+          
+          -- Update the implementation's children
+          updatedImpl = impl { defInfo = (defInfo impl) { children = map iden methods } }
+          
+          -- Update each method's parent
+          updatedMethods = map (addParent implName) methods
+          
+          -- Replace the original definitions with updated ones
+          implReplaced = replaceDefinition impl updatedImpl defs
+          allReplaced = foldl (\acc m -> 
+                                let updatedM = findUpdatedMethod m updatedMethods 
+                                in replaceDefinition m updatedM acc
+                              ) implReplaced methods
+      in allReplaced
+      
+    -- Function composition operator for readability
+    (>>>) :: (a -> b) -> (b -> c) -> (a -> c)
+    f >>> g = g . f
+    
+    -- Check if a function belongs to an implementation
+    belongsToImpl :: String -> Maybe String -> Definition -> Bool
+    belongsToImpl typeName traitName def =
+      -- In a real implementation, we would have access to the function's
+      -- location within the impl block in the source code.
+      -- Here we're using simple heuristics that could be improved:
+      
+      -- 1. Self parameter indicates a method (approximate check)
+      let hasSelfParam = case signature (defInfo def) of
+                           Just sig -> "self" `isInfixOf` sig
+                           Nothing -> False
+                           
+          -- 2. For trait impls, check if method matches a trait method
+          isTraitMethod = case traitName of
+                            Just trait -> True  -- Simple approximation; would need to check trait methods
+                            Nothing -> False
+      in hasSelfParam
+    
+    -- See if a function is likely to be a method of an implementation
+    isMethodOf :: String -> Definition -> Bool
+    isMethodOf implName def = 
+      -- Check if the definition is a function first
+      defType def == Function &&
+      -- We can add more sophisticated logic to determine if a function
+      -- belongs to an impl block, but for now we'll just use a simple approach.
+      -- In real Rust code parsing, this would need more context.
+      -- For now, we'll use a heuristic that methods defined after
+      -- an impl block belong to that block, until another impl block is found.
+      -- This is very simplified and would need source code position tracking 
+      -- for a proper implementation.
+      True
+    
+    -- Set a definition's parent
+    addParent :: String -> Definition -> Definition
+    addParent parentName def = 
+      def { defInfo = (defInfo def) { parent = Just parentName } }
+    
+    -- Find an updated method in the list
+    findUpdatedMethod :: Definition -> [Definition] -> Definition
+    findUpdatedMethod method updatedMethods = 
+      case filter (\m -> iden m == iden method) updatedMethods of
+        (m:_) -> m
+        [] -> method
+    
+    -- Process modules and their contents
+    processModules :: [Definition] -> [Definition]
+    processModules defs = 
+      let modules = filter (\d -> defType d == Module) defs
+      in foldr processModule defs modules
+        
+    -- Process a module and its contents
+    processModule :: Definition -> [Definition] -> [Definition]
+    processModule mod defs = 
+      let modName = iden mod
+          -- Simple heuristic: items in a module might have modName:: prefix
+          modItems = filter (\d -> isPrefixOf (modName ++ "::") (iden d)) defs
+          -- Update the module's children
+          updatedMod = mod { defInfo = (defInfo mod) { children = map iden modItems } }
+          -- Update each item's parent
+          updatedItems = map (addParent modName) modItems
+          -- Replace the original definitions with updated ones
+          modReplaced = replaceDefinition mod updatedMod defs
+          allReplaced = foldl (\acc i -> 
+                               let updatedI = findUpdatedItem i updatedItems 
+                               in replaceDefinition i updatedI acc
+                             ) modReplaced modItems
+      in allReplaced
+    
+    -- Find an updated item in the list
+    findUpdatedItem :: Definition -> [Definition] -> Definition
+    findUpdatedItem item updatedItems = 
+      case filter (\i -> iden i == iden item) updatedItems of
+        (i:_) -> i
+        [] -> item
+    
+    -- Replace a definition in the list
+    replaceDefinition :: Definition -> Definition -> [Definition] -> [Definition]
+    replaceDefinition old new defs = map (\d -> if iden d == iden old then new else d) defs
+
 -- | Parse a file and extract definitions based on language
 extractDefinitions :: FilePath -> IO [Definition]
 extractDefinitions filename = do
@@ -290,12 +443,45 @@ extractDefinitions filename = do
     Just content ->
       if takeExtension filename == ".rs"
         then do
+          -- Extract all definitions by type
           let functions = extractRustFunctions content
               structs = extractRustStructs content
               modules = extractRustModules content
               impls = extractRustImpls content
-          return $ functions ++ structs ++ modules ++ impls
+              
+              -- Create a filtered list of impl blocks by taking only one per base type
+              -- We prioritize trait impls over regular impls
+              baseTypes = nub $ map (baseImplName . iden) impls
+              
+              -- For each base type, pick the best impl (prioritize trait impls)
+              pickBestImpl :: String -> Maybe Definition
+              pickBestImpl baseName = 
+                let typeImpls = filter (\d -> baseImplName (iden d) == baseName) impls
+                    -- First look for trait impl
+                    traitImpls = filter (\d -> ':' `elem` iden d) typeImpls
+                in if not (null traitImpls)
+                     then Just (head traitImpls)  -- Use trait impl if available
+                     else if not (null typeImpls)
+                          then Just (head typeImpls)  -- Otherwise use regular impl
+                          else Nothing
+              
+              -- Select the best impls
+              selectedImpls = mapMaybe pickBestImpl baseTypes
+              
+              -- Combine all definitions
+              allDefs = functions ++ structs ++ modules ++ selectedImpls
+              
+              -- Build the tree structure
+              treeDefs = buildDefinitionTree allDefs
+              
+          -- Return the processed definitions
+          return treeDefs
         else return []
+  where
+    -- Get the base implementation name (part before any colon)
+    baseImplName :: String -> String
+    baseImplName name = case break (==':') name of
+                         (base, _) -> base
 
 -- Helper functions
 splitLines :: String -> [String]

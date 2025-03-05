@@ -28,12 +28,14 @@ data DefType
 
 -- | Type to store extra information about a definition
 data DefInfo = DefInfo
-  { signature :: Maybe String  -- ^ Function or method signature if available
+  { signature :: Maybe String     -- ^ Function or method signature if available
+  , parent    :: Maybe String     -- ^ Parent definition name (for nested items)
+  , children  :: [String]         -- ^ Child definition names
   } deriving (Eq, Show)
 
 -- | Default empty definition info
 emptyDefInfo :: DefInfo
-emptyDefInfo = DefInfo Nothing
+emptyDefInfo = DefInfo Nothing Nothing []
 
 -- | A single code definition
 data Definition = Definition
