@@ -12,9 +12,9 @@ import System.Directory (doesFileExist)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Char (isAlphaNum, isSpace)
 import Data.List (isPrefixOf, isInfixOf, tails, findIndex, nub, partition,
-                 sortBy, groupBy, nubBy)
+                 sortBy, groupBy, nubBy, find)
 import Data.Function (on)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, listToMaybe)
 import Debug.Trace (trace)
 import CodeSketch.Types (DefInfo(..), emptyDefInfo)
 
@@ -89,13 +89,104 @@ extractFunctionSignature line =
     stripSpace :: String -> String
     stripSpace = dropWhile isSpace . reverse . dropWhile isSpace . reverse
 
--- | Extract Rust function definitions
+-- | Extract Rust function definitions, including trait methods
 extractRustFunctions :: String -> [Definition]
 extractRustFunctions content = 
-  let lns = zip [1..] (splitLines content)
-      functionLines = filter (isFunctionDeclaration . snd) lns
-  in map extractFunctionDef functionLines
+  let -- Number all lines for reference
+      numberedLines = zip [1..] (splitLines content)
+      -- Get regular function declarations 
+      functionLines = filter (isFunctionDeclaration . snd) numberedLines
+      -- Get trait method declarations
+      traitMethodLines = extractTraitMethodLines content
+      
+      processLine lineInfo =
+        let def = extractFunctionDef lineInfo
+            (lineNum, line) = lineInfo
+            -- Store the line number in the DefInfo
+            updatedInfo = (defInfo def) { lineNum = Just lineNum }
+            
+            -- Check if it's inside a trait definition
+            isTraitMethod = isTraitMethodDeclaration line
+            finalInfo = if isTraitMethod
+                        then -- Try to find the trait name to establish parent relationship
+                             let traitParentName = findTraitForMethod lineNum numberedLines
+                             in updatedInfo { parent = traitParentName }
+                        else updatedInfo
+                                                 
+        in def { defInfo = finalInfo }
+        
+      -- Find the trait that contains this method
+      findTraitForMethod :: Integer -> [(Integer, String)] -> Maybe String
+      findTraitForMethod methodLineNum allLines =
+        let -- Get the global numbered lines
+            numberedLines = zip [1..] (splitLines content)
+            -- Find trait declarations
+            traitLines = filter (isTraitDeclaration . snd) numberedLines
+            
+            -- Check if a trait contains this line
+            containsMethod (traitLineNum, traitLine) =
+              let traitName = extractTraitName traitLine
+                  -- Find where the trait ends
+                  linesAfterTrait = dropWhile (\(num, _) -> num < traitLineNum) allLines
+                  closingLine = find (\(_, l) -> "}" `isInfixOf` l) linesAfterTrait
+                  
+                  traitEndLine = case closingLine of
+                                   Just (num, _) -> num
+                                   Nothing -> 0  -- Fallback
+              in if traitLineNum < methodLineNum && methodLineNum < traitEndLine
+                 then Just traitName
+                 else Nothing
+                 
+        in listToMaybe (mapMaybe containsMethod traitLines)
+            
+  in map processLine (functionLines ++ traitMethodLines)
+  
   where
+    -- Find trait method declarations within trait blocks
+    extractTraitMethodLines :: String -> [(Integer, String)]
+    extractTraitMethodLines content =
+      let lines = splitLines content
+          numberedLines = zip [1..] lines
+          -- Find trait opening lines 
+          traitStarts = filter (isTraitDeclaration . snd) numberedLines
+          
+          -- For each trait, extract its methods
+          extractTraitMethods (traitLineNum, traitLine) =
+            let -- Find the trait name for parent relationship
+                traitName = extractTraitName traitLine
+                -- Find opening brace position
+                bracePos = findSubstring "{" traitLine
+                -- Find the trait body (lines between opening and closing braces)
+                traitBodyStart = traitLineNum + 1
+                traitBodyLines = takeWhile (\(_, l) -> not ("};" `isInfixOf` l || "}" `isInfixOf` l)) 
+                                (drop (fromInteger traitBodyStart - 1) numberedLines)
+                -- Find method declarations in the trait body
+                methodLines = filter (isTraitMethodDeclaration . snd) traitBodyLines
+            in methodLines
+                
+      in concatMap extractTraitMethods traitStarts
+    
+    -- Check if a line is a trait method declaration
+    isTraitMethodDeclaration :: String -> Bool
+    isTraitMethodDeclaration line =
+      ("fn " `isInfixOf` line) && ("(" `isInfixOf` line) && (";" `isInfixOf` line)
+      
+    -- Check if a line is a trait declaration
+    isTraitDeclaration :: String -> Bool
+    isTraitDeclaration line = 
+      ("trait " `isInfixOf` line) && ("{" `isInfixOf` line)
+        
+    -- Extract trait name from a trait declaration line
+    extractTraitName :: String -> String
+    extractTraitName line =
+      let isPub = "pub trait " `isInfixOf` line
+          traitPos = findSubstring "trait " line + 6
+          pubPos = findSubstring "pub trait " line
+          startPos = if isPub && pubPos >= 0 then pubPos + 10 else traitPos
+          nameStr = drop startPos line
+      in takeWhile isIdentChar (dropWhile isSpace nameStr)
+      
+    -- Regular function declarations (not trait methods)
     isFunctionDeclaration line = 
       ("fn " `isInfixOf` line) && ("(" `isInfixOf` line)
     
@@ -112,7 +203,7 @@ extractRustFunctions content =
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
           -- Try to extract signature
           signature = extractFunctionSignature line
-      in Definition name Function vis (DefInfo signature Nothing [])
+      in Definition name Function vis (DefInfo signature Nothing [] Nothing)
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -134,9 +225,16 @@ extractRustStructs content =
       structLines = filter (isStructDeclaration . snd) lns
       enumLines = filter (isEnumDeclaration . snd) lns
       traitLines = filter (isTraitDeclaration . snd) lns
-  in map extractStructDef structLines ++ 
-     map extractEnumDef enumLines ++
-     map extractTraitDef traitLines
+      
+      -- Add line numbers to definitions
+      processLine extractor (lineNum, line) =
+        let def = extractor (lineNum, line)
+            updatedInfo = (defInfo def) { lineNum = Just lineNum }
+        in def { defInfo = updatedInfo }
+        
+  in map (processLine extractStructDef) structLines ++ 
+     map (processLine extractEnumDef) enumLines ++
+     map (processLine extractTraitDef) traitLines
   where
     isStructDeclaration line = 
       ("struct " `isInfixOf` line) && (("{" `isInfixOf` line) || (";" `isInfixOf` line))
@@ -157,7 +255,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Struct vis (DefInfo Nothing Nothing [])
+      in Definition name Struct vis (DefInfo Nothing Nothing [] Nothing)
     
     extractEnumDef (_, line) =
       let isPub = "pub enum " `isInfixOf` line
@@ -169,7 +267,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Enum vis (DefInfo Nothing Nothing [])
+      in Definition name Enum vis (DefInfo Nothing Nothing [] Nothing)
     
     extractTraitDef (_, line) =
       let isPub = "pub trait " `isInfixOf` line
@@ -181,7 +279,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Trait vis (DefInfo Nothing Nothing [])
+      in Definition name Trait vis (DefInfo Nothing Nothing [] Nothing)
       
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)
@@ -201,7 +299,11 @@ extractRustImpls :: String -> [Definition]
 extractRustImpls content = 
   let lns = zip [1..] (splitLines content)
       implLines = filter (isImplDeclaration . snd) lns
-  in map (extractImplDef . snd) implLines
+  in map (\(lineNum, line) -> 
+           let def = extractImplDef line
+               updatedInfo = (defInfo def) { lineNum = Just lineNum }
+           in def { defInfo = updatedInfo }
+         ) implLines
   where
     isImplDeclaration line = 
       ("impl " `isInfixOf` line) && ("{" `isInfixOf` line)
@@ -222,7 +324,7 @@ extractRustImpls content =
                            Just trait -> Just $ trait ++ " for " ++ name
                            Nothing -> Nothing
                            
-      in Definition uniqueId Impl Private (DefInfo implSignature Nothing [])
+      in Definition uniqueId Impl Private (DefInfo implSignature Nothing [] Nothing)
     
     -- Extract detailed information about the impl block
     extractImplInfo :: String -> (String, String, Maybe String)
@@ -269,7 +371,11 @@ extractRustModules :: String -> [Definition]
 extractRustModules content = 
   let lns = zip [1..] (splitLines content)
       moduleLines = filter (isModuleDeclaration . snd) lns
-  in map extractModuleDef moduleLines
+  in map (\(lineNum, line) -> 
+           let def = extractModuleDef (lineNum, line)
+               updatedInfo = (defInfo def) { lineNum = Just lineNum }
+           in def { defInfo = updatedInfo }
+         ) moduleLines
   where
     isModuleDeclaration line = 
       ("mod " `isInfixOf` line) && (("{" `isInfixOf` line) || (";" `isInfixOf` line))
@@ -284,7 +390,7 @@ extractRustModules content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Module vis (DefInfo Nothing Nothing [])
+      in Definition name Module vis (DefInfo Nothing Nothing [] Nothing)
     
     findSubstring :: String -> String -> Int
     findSubstring sub str = findIndex (isPrefixOf sub) (tails str) `orElse` (-1)

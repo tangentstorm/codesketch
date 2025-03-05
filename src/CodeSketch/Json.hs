@@ -11,6 +11,7 @@ import CodeSketch.Types
 import Data.Aeson
 import Data.Aeson.Encoding (encodingToLazyByteString)
 import qualified Data.ByteString.Lazy.Char8 as BL
+import Text.Printf (printf)
 
 -- ANSI color codes
 type Color = String
@@ -97,6 +98,15 @@ rootToJSONString = BL.unpack . encode
 -- | Convert a definition to a readable text line
 definitionToTextLine :: Definition -> String
 definitionToTextLine def = 
+  -- Add line number prefix if available
+  let lineNumPrefix = case lineNum (defInfo def) of
+                        Just num -> colorize dim (printf "%04d " num)
+                        Nothing -> ""
+  in lineNumPrefix ++ formatDefinition def
+  
+-- | Format a definition without line numbers
+formatDefinition :: Definition -> String
+formatDefinition def = 
   let -- Special case for impl blocks
       formatImpl = case defType def of
         Impl -> case signature (defInfo def) of

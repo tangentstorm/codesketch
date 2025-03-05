@@ -31,11 +31,12 @@ data DefInfo = DefInfo
   { signature :: Maybe String     -- ^ Function or method signature if available
   , parent    :: Maybe String     -- ^ Parent definition name (for nested items)
   , children  :: [String]         -- ^ Child definition names
+  , lineNum   :: Maybe Integer    -- ^ Line number in the source file
   } deriving (Eq, Show)
 
 -- | Default empty definition info
 emptyDefInfo :: DefInfo
-emptyDefInfo = DefInfo Nothing Nothing []
+emptyDefInfo = DefInfo Nothing Nothing [] Nothing
 
 -- | A single code definition
 data Definition = Definition
