@@ -319,13 +319,13 @@ fn find_rust_traits(root: &Node, source: &[u8]) -> Result<Vec<Definition>> {
             Visibility::Private
         };
         
-        // Find trait methods
-        let method_query = "(trait_item body: (declaration_list (function_signature) @method))";
+        // Find trait methods (using function_item instead of function_signature)
+        let method_query = "(trait_item body: (declaration_list (function_item) @method))";
         let method_nodes = query_nodes(&node, source, method_query)?;
         
         let mut method_names = Vec::new();
         for method_node in &method_nodes {
-            let method_name_query = "(function_signature name: (identifier) @name)";
+            let method_name_query = "(function_item name: (identifier) @name)";
             let method_name_nodes = query_nodes(method_node, source, method_name_query)?;
             
             if !method_name_nodes.is_empty() {
