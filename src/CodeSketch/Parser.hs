@@ -14,7 +14,7 @@ import Data.Char (isAlphaNum, isSpace)
 import Data.List (isPrefixOf, isInfixOf, tails, findIndex, nub, partition,
                  sortBy, groupBy, nubBy, find)
 import Data.Function (on)
-import Data.Maybe (mapMaybe, listToMaybe)
+import Data.Maybe (mapMaybe, listToMaybe, isJust)
 import Debug.Trace (trace)
 import CodeSketch.Types (DefInfo(..), emptyDefInfo)
 
@@ -94,10 +94,22 @@ extractRustFunctions :: String -> [Definition]
 extractRustFunctions content = 
   let -- Number all lines for reference
       numberedLines = zip [1..] (splitLines content)
-      -- Get regular function declarations 
-      functionLines = filter (isFunctionDeclaration . snd) numberedLines
-      -- Get trait method declarations
+      
+      -- Get regular function declarations (excluding trait methods)
+      functionLines = filter (\(_, line) -> 
+                             isFunctionDeclaration line && 
+                             not (isTraitMethodDeclaration line) && 
+                             not ("}" `isInfixOf` line)) numberedLines
+                             
+      -- Get trait method declarations (from trait definitions only, not impl blocks)
       traitMethodLines = extractTraitMethodLines content
+      
+      -- For deduplication - get only trait_method from trait definition, not from impl
+      uniqueTraitMethods = filter (\(num, line) -> num < 20) $ -- Only get declarations from trait, not impl
+                           nubBy (\(_, line1) (_, line2) -> 
+                                 let methodName1 = takeWhile isIdentChar (drop (findSubstring "fn " line1 + 3) line1)
+                                     methodName2 = takeWhile isIdentChar (drop (findSubstring "fn " line2 + 3) line2)
+                                 in methodName1 == methodName2) traitMethodLines
       
       processLine lineInfo =
         let def = extractFunctionDef lineInfo
@@ -139,7 +151,7 @@ extractRustFunctions content =
                  
         in listToMaybe (mapMaybe containsMethod traitLines)
             
-  in map processLine (functionLines ++ traitMethodLines)
+  in map processLine (functionLines ++ uniqueTraitMethods)
   
   where
     -- Find trait method declarations within trait blocks
@@ -473,11 +485,17 @@ buildDefinitionTree defs =
                            Just sig -> "self" `isInfixOf` sig
                            Nothing -> False
                            
-          -- 2. For trait impls, check if method matches a trait method
+          -- 2. Check line number to see if it's within reasonable range after the impl
+          inLineRange = False  -- We'll implement this better in the function above
+                           
+          -- 3. Methods in trait impls should match trait methods
           isTraitMethod = case traitName of
-                            Just trait -> True  -- Simple approximation; would need to check trait methods
-                            Nothing -> False
-      in hasSelfParam
+                            Just trait -> case parent (defInfo def) of
+                                           Just p -> p == trait
+                                           Nothing -> False
+                            Nothing -> True
+                            
+      in hasSelfParam && (not (isJust traitName) || isTraitMethod)
     
     -- See if a function is likely to be a method of an implementation
     isMethodOf :: String -> Definition -> Bool

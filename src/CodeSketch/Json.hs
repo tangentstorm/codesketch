@@ -12,6 +12,7 @@ import Data.Aeson
 import Data.Aeson.Encoding (encodingToLazyByteString)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Text.Printf (printf)
+import Data.List (sortBy, nubBy)
 
 -- ANSI color codes
 type Color = String
@@ -95,15 +96,6 @@ rootToJSON = toJSON
 rootToJSONString :: Root -> String
 rootToJSONString = BL.unpack . encode
 
--- | Convert a definition to a readable text line
-definitionToTextLine :: Definition -> String
-definitionToTextLine def = 
-  -- Add line number prefix if available
-  let lineNumPrefix = case lineNum (defInfo def) of
-                        Just num -> colorize dim (printf "%04d " num)
-                        Nothing -> ""
-  in lineNumPrefix ++ formatDefinition def
-  
 -- | Format a definition without line numbers
 formatDefinition :: Definition -> String
 formatDefinition def = 
@@ -170,6 +162,14 @@ pathInfoToTextOutline pi =
   colorize (bold ++ blue) (path pi) ++ ":\n" ++ 
   definitionsToTextTree (defs pi) []
 
+-- | Add line number to formatted definition
+addLineNumber :: Definition -> String -> String
+addLineNumber def formattedDef =
+  let lineNumPrefix = case lineNum (defInfo def) of
+                        Just num -> colorize dim (printf "%4d " num)
+                        Nothing -> "     "
+  in lineNumPrefix ++ formattedDef
+
 -- | Build a hierarchical text tree of definitions
 definitionsToTextTree :: [Definition] -> [String] -> String
 definitionsToTextTree definitions parentPath =
@@ -179,8 +179,8 @@ definitionsToTextTree definitions parentPath =
                      Nothing -> True
                      Just p -> not (p `elem` (map iden definitions))
     
-    -- Get top-level definitions
-    topDefs = filter isTopLevel definitions
+    -- Get top-level definitions and sort them by line number
+    topDefs = sortByLineNumber (filter isTopLevel definitions)
     
     -- Process each top-level definition
     processTopDef def = 
@@ -195,15 +195,37 @@ definitionsToTextTree definitions parentPath =
           -- Combine both sources of children
           allChildrenNames = childrenNames ++ map iden childrenByParent
           childDefs = filter (\d -> iden d `elem` allChildrenNames) definitions
+          -- Sort children by line number
+          sortedChildDefs = sortByLineNumber childDefs
           
-          -- Generate output
-          topLine = indent ++ definitionToTextLine def ++ "\n"
+          -- Generate output with line number before indentation
+          formattedDef = indent ++ formatDefinition def 
+          topLine = addLineNumber def formattedDef ++ "\n"
+          
           childLines = if null childDefs 
                         then "" 
-                        else definitionsToTextTree childDefs (parentPath ++ [iden def])
+                        else definitionsToTextTree sortedChildDefs (parentPath ++ [iden def])
       in topLine ++ childLines
   in
     concatMap processTopDef topDefs
+    
+-- | Sort definitions by line number
+sortByLineNumber :: [Definition] -> [Definition]
+sortByLineNumber defs = 
+  -- Remove duplicate methods first
+  let uniqueDefs = nubBy (\d1 d2 -> iden d1 == iden d2 && 
+                                    defType d1 == defType d2 && 
+                                    signature (defInfo d1) == signature (defInfo d2)) defs
+  -- Then sort by line number
+  in sortBy (\d1 d2 -> 
+               let l1 = lineNum (defInfo d1)
+                   l2 = lineNum (defInfo d2)
+               in case (l1, l2) of
+                    (Just n1, Just n2) -> compare n1 n2
+                    (Just _, Nothing) -> LT
+                    (Nothing, Just _) -> GT
+                    (Nothing, Nothing) -> EQ
+             ) uniqueDefs
 
 -- | Convert the root structure to a text outline
 rootToTextOutline :: Root -> String
