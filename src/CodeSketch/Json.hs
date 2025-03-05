@@ -97,42 +97,62 @@ rootToJSONString = BL.unpack . encode
 -- | Convert a definition to a readable text line
 definitionToTextLine :: Definition -> String
 definitionToTextLine def = 
-  let -- Type description and color
-      (typeDesc, typeColor) = case defType def of
-        Module   -> ("module", cyan)
-        Struct   -> ("struct", green)
-        Enum     -> ("enum", green)
-        Function -> ("fn", yellow)
-        Trait    -> ("trait", magenta)
-        Impl     -> ("impl", blue)
-        Other s  -> (s, reset)
-      
-      -- Visibility description and color (Rust-specific)
-      (visDesc, visColor) = case visibility def of
-        Public    -> ("pub", green)
-        Protected -> ("protected", yellow)
-        Private   -> ("", reset)  -- Hide "private" for Rust
-      
-      -- Name with appropriate styling
-      coloredName = case defType def of
-        Module -> colorize (bold ++ cyan) (iden def)
-        Struct -> colorize (bold ++ green) (iden def)
-        Enum   -> colorize (bold ++ green) (iden def)
-        Trait  -> colorize (bold ++ magenta) (iden def)
-        _      -> colorize bold (iden def)
-      
-      -- Signature text for functions and impl blocks
-      sigText = case defType def of
-        Function -> case signature (defInfo def) of
-                     Just sig -> " " ++ colorize dim sig
-                     Nothing -> ""
+  let -- Special case for impl blocks
+      formatImpl = case defType def of
         Impl -> case signature (defInfo def) of
-                 Just sig -> " " ++ colorize cyan sig
-                 Nothing -> ""
+                 -- Show "impl TraitName for TypeName" format
+                 Just sig -> colorize (bold ++ blue) "impl " ++ colorize cyan sig
+                 Nothing -> colorize (bold ++ blue) "impl " ++ colorize cyan (baseImplName (iden def))
         _ -> ""
-  in (if null visDesc then "" else colorize visColor visDesc ++ " ") ++ 
-     colorize typeColor typeDesc ++ " " ++ 
-     coloredName ++ sigText
+
+      -- Regular formatting for non-impl items
+      regularFormatting = 
+        let -- Type description and color
+            (typeDesc, typeColor) = case defType def of
+              Module   -> ("module", cyan)
+              Struct   -> ("struct", green)
+              Enum     -> ("enum", green)
+              Function -> ("fn", yellow)
+              Trait    -> ("trait", magenta)
+              -- Skip impl blocks, they're handled separately
+              Impl     -> ("", reset)
+              Other s  -> (s, reset)
+            
+            -- Visibility description and color (Rust-specific)
+            (visDesc, visColor) = case visibility def of
+              Public    -> ("pub", green)
+              Protected -> ("protected", yellow)
+              Private   -> ("", reset)  -- Hide "private" for Rust
+            
+            -- Name with appropriate styling
+            coloredName = case defType def of
+              Module -> colorize (bold ++ cyan) (iden def)
+              Struct -> colorize (bold ++ green) (iden def)
+              Enum   -> colorize (bold ++ green) (iden def)
+              Trait  -> colorize (bold ++ magenta) (iden def)
+              -- Skip impl blocks, they're handled separately
+              Impl   -> ""
+              _      -> colorize bold (iden def)
+            
+            -- Function signature
+            sigText = case defType def of
+              Function -> case signature (defInfo def) of
+                           Just sig -> " " ++ colorize dim sig
+                           Nothing -> ""
+              _ -> ""
+
+        in (if null visDesc then "" else colorize visColor visDesc ++ " ") ++ 
+           (if null typeDesc then "" else colorize typeColor typeDesc ++ " ") ++ 
+           coloredName ++ sigText
+      
+      -- Extract base name from impl identifier
+      baseImplName name = case break (==':') name of
+                           (base, _) -> base
+                           
+  -- Return impl special formatting or regular formatting
+  in if defType def == Impl
+       then formatImpl
+       else regularFormatting
 
 -- | Convert a path_info to a text outline with indentation
 pathInfoToTextOutline :: PathInfo -> String
