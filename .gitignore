@@ -1,1 +1,11 @@
 *.~
+dist
+dist-*
+.ghc.environment.*
+cabal.project.local*
+.HTF/
+.stack-work/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
