@@ -15,9 +15,13 @@ struct Cli {
     #[arg(required = true)]
     paths: Vec<PathBuf>,
 
-    /// Output format (json, text, or interactive)
-    #[arg(short, long, default_value = "text")]
-    format: String,
+    /// Output in JSON format
+    #[arg(short = 'j', long, conflicts_with = "interactive")]
+    json: bool,
+    
+    /// Start interactive browser mode
+    #[arg(short = 'i', long, conflicts_with = "json")]
+    interactive: bool,
 }
 
 fn main() -> Result<()> {
@@ -39,10 +43,12 @@ fn main() -> Result<()> {
     }
     
     // Output the results
-    match cli.format.as_str() {
-        "json" => output::output_json(&all_definitions)?,
-        "interactive" => browser::run_browser(all_definitions)?,
-        _ => output::output_text(&all_definitions)?,
+    if cli.json {
+        output::output_json(&all_definitions)?;
+    } else if cli.interactive {
+        browser::run_browser(all_definitions)?;
+    } else {
+        output::output_text(&all_definitions)?;
     }
 
     Ok(())

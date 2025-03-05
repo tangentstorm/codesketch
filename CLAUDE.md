@@ -2,8 +2,9 @@
 
 ## Build & Test Commands
 - Build: `cargo build` - Build the project
-- Run: `cargo run -- /path/to/code` - Run on a directory/file
-- Run (with format): `cargo run -- -f json /path/to/code` - Output in JSON format
+- Run: `cargo run -- /path/to/code` - Run on a directory/file (text output)
+- Run (JSON): `cargo run -- -j /path/to/code` - Output in JSON format
+- Run (Interactive): `cargo run -- -i /path/to/code` - Launch interactive browser
 - Install: `cargo install --path .` - Install the binary
 - Clean: `cargo clean` - Clean build artifacts
 - Sample: `cargo run -- samples/base.rs` - Run on a sample file
