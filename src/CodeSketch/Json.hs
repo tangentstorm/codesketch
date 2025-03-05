@@ -30,9 +30,11 @@ instance ToJSON PathInfo where
 defTypeToText :: DefType -> String
 defTypeToText dt = case dt of
   Module   -> "module"
-  Class    -> "class"
+  Struct   -> "struct"
+  Enum     -> "enum"
   Function -> "fn"
   Trait    -> "trait"
+  Impl     -> "impl"
   Other s  -> s
 
 -- | Helper to convert visibility to string

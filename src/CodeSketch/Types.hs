@@ -16,9 +16,11 @@ data Visibility
 -- | Type of code definition
 data DefType
   = Module    -- ^ Module or namespace
-  | Class     -- ^ Class definition
+  | Struct    -- ^ Struct definition
+  | Enum      -- ^ Enum definition
   | Function  -- ^ Function or method definition
   | Trait     -- ^ Trait/interface/protocol
+  | Impl      -- ^ Implementation block
   | Other String -- ^ Other definition types
   deriving (Eq, Show)
 

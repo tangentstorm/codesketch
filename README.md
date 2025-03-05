@@ -44,7 +44,7 @@ path = {
 
 def = {
   iden: string,
-  type: "module" | "class" | "fn" | "trait", // | etc,
+  type: "module" | "struct" | "enum" | "fn" | "trait" | "impl", // | etc,
   vis: "*" | "+" | "-",                      // for public/protected/private
 }
 ```
@@ -60,7 +60,8 @@ Where:
 [{
   "path": "/path/to/file.rs",
   "defs": [
-    {"iden": "MyStruct", "type": "class", "vis": "*"},
+    {"iden": "MyStruct", "type": "struct", "vis": "*"},
+    {"iden": "MyEnum", "type": "enum", "vis": "*"},
     {"iden": "my_function", "type": "fn", "vis": "-"},
     {"iden": "MyTrait", "type": "trait", "vis": "*"}
   ]

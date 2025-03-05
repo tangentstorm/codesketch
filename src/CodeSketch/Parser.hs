@@ -105,7 +105,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Class vis
+      in Definition name Struct vis
     
     extractEnumDef (_, line) =
       let isPub = "pub enum " `isInfixOf` line
@@ -117,7 +117,7 @@ extractRustStructs content =
           
           nameStr = drop startPos line
           name = takeWhile isIdentChar (dropWhile isSpace nameStr)
-      in Definition name Class vis
+      in Definition name Enum vis
     
     extractTraitDef (_, line) =
       let isPub = "pub trait " `isInfixOf` line
